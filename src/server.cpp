@@ -282,7 +282,7 @@ bool Server::run(int port) {
             const std::string lang = body.value("lang", "en");
 
             std::string model = getConfigValue("GEMINI_MODEL");
-            if (model.empty()) model = "gemini-2.5-flash";
+            if (model.empty()) model = "gemini-flash-latest";
             const GeminiClient gemini(api_key, model);
 
             const ParsedRequest parsed = gemini.parseUserRequest(text);

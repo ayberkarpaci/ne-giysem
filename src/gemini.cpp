@@ -75,8 +75,17 @@ std::string extractGeminiText(const std::string& api_response_json) {
                                  j["error"].value("message", api_response_json));
     }
     try {
-        return j.at("candidates").at(0).at("content").at("parts").at(0).at("text")
-            .get<std::string>();
+        // Thinking models may split the answer across several parts (and mark
+        // internal reasoning with "thought": true) — concatenate the real text.
+        std::string text;
+        for (const auto& part : j.at("candidates").at(0).at("content").at("parts")) {
+            if (part.value("thought", false)) continue;
+            if (part.contains("text")) text += part["text"].get<std::string>();
+        }
+        if (text.empty()) {
+            throw std::runtime_error("gemini returned no text: " + api_response_json);
+        }
+        return text;
     } catch (const json::exception&) {
         throw std::runtime_error("unexpected gemini response shape: " + api_response_json);
     }

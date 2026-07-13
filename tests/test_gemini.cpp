@@ -21,6 +21,18 @@ TEST_CASE("extractGeminiText") {
             R"({"candidates":[{"content":{"parts":[{"text":"hello"}]}}]})");
         CHECK(text == "hello");
     }
+    SECTION("concatenates split parts and skips thoughts") {
+        const auto text = negiysem::extractGeminiText(
+            R"({"candidates":[{"content":{"parts":[
+                {"text":"internal reasoning","thought":true},
+                {"text":"{\"a\":"},
+                {"text":" 1}"}]}}]})");
+        CHECK(text == "{\"a\": 1}");
+    }
+    SECTION("only thoughts means no text") {
+        CHECK_THROWS(negiysem::extractGeminiText(
+            R"({"candidates":[{"content":{"parts":[{"text":"hmm","thought":true}]}}]})"));
+    }
     SECTION("surfaces API errors") {
         CHECK_THROWS(negiysem::extractGeminiText(
             R"({"error":{"message":"API key not valid"}})"));

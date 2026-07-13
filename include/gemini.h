@@ -27,7 +27,9 @@ ParsedRequest parseParsedRequestJson(const std::string& text);
 // Thin REST client for the Gemini API (generativelanguage.googleapis.com).
 class GeminiClient {
 public:
-    explicit GeminiClient(std::string api_key, std::string model = "gemini-2.5-flash");
+    // "gemini-flash-latest" is Google's rolling alias for the current Flash
+    // model, so the default keeps working as models are retired.
+    explicit GeminiClient(std::string api_key, std::string model = "gemini-flash-latest");
 
     // Free text -> structured request. Throws std::runtime_error on API or
     // parse failure.
