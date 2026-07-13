@@ -298,6 +298,8 @@ bool Server::run(int port) {
             request.lang = lang;
             request.colors_preferred = parsed.colors_preferred;
             request.colors_avoided = parsed.colors_avoided;
+            request.patterns_preferred = parsed.patterns_preferred;
+            request.patterns_avoided = parsed.patterns_avoided;
 
             const bool use_wardrobe = WardrobeRepository(db_).count() > 0;
             const Recommender recommender(db_);
@@ -328,7 +330,9 @@ bool Server::run(int port) {
                       {"mood", request.mood_slug},
                       {"occasion", parsed.occasion},
                       {"colors_preferred", parsed.colors_preferred},
-                      {"colors_avoided", parsed.colors_avoided}}},
+                      {"colors_avoided", parsed.colors_avoided},
+                      {"patterns_preferred", parsed.patterns_preferred},
+                      {"patterns_avoided", parsed.patterns_avoided}}},
                     {"source", use_wardrobe ? "wardrobe" : "catalog"},
                     {"outfit", items},
                     {"explanation", explanation},

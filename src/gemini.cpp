@@ -19,6 +19,8 @@ const std::vector<std::string> kMoods = {"energetic", "cozy", "confident", "rela
 const std::vector<std::string> kOccasions = {"work", "casual", "sport", "date", "special"};
 const std::vector<std::string> kColors = {"black", "white", "gray",   "navy", "blue", "red",
                                           "green", "beige", "brown",  "yellow", "pink", "purple"};
+const std::vector<std::string> kPatterns = {"solid",     "striped", "plaid",     "floral",
+                                            "polka-dot", "graphic", "camouflage"};
 
 std::string joinQuoted(const std::vector<std::string>& values) {
     std::ostringstream out;
@@ -58,7 +60,9 @@ std::string buildParsePrompt(const std::string& user_text, const std::string& to
            << "  \"mood\": <one of [" << joinQuoted(kMoods) << "] or null>,\n"
            << "  \"occasion\": <one of [" << joinQuoted(kOccasions) << "] or null>,\n"
            << "  \"colors_preferred\": <array, subset of [" << joinQuoted(kColors) << "]>,\n"
-           << "  \"colors_avoided\": <same vocabulary>\n"
+           << "  \"colors_avoided\": <same vocabulary>,\n"
+           << "  \"patterns_preferred\": <array, subset of [" << joinQuoted(kPatterns) << "]>,\n"
+           << "  \"patterns_avoided\": <same vocabulary>\n"
            << "}\n"
            << "Use null/empty when the request does not say. User request:\n"
            << user_text;
@@ -107,14 +111,17 @@ ParsedRequest parseParsedRequestJson(const std::string& text) {
         contains(kOccasions, j["occasion"])) {
         parsed.occasion = j["occasion"];
     }
-    const auto readColors = [&](const char* key, std::vector<std::string>& out) {
+    const auto readSlugs = [&](const char* key, const std::vector<std::string>& vocabulary,
+                               std::vector<std::string>& out) {
         if (!j.contains(key) || !j[key].is_array()) return;
         for (const auto& c : j[key]) {
-            if (c.is_string() && contains(kColors, c)) out.push_back(c);
+            if (c.is_string() && contains(vocabulary, c)) out.push_back(c);
         }
     };
-    readColors("colors_preferred", parsed.colors_preferred);
-    readColors("colors_avoided", parsed.colors_avoided);
+    readSlugs("colors_preferred", kColors, parsed.colors_preferred);
+    readSlugs("colors_avoided", kColors, parsed.colors_avoided);
+    readSlugs("patterns_preferred", kPatterns, parsed.patterns_preferred);
+    readSlugs("patterns_avoided", kPatterns, parsed.patterns_avoided);
     return parsed;
 }
 

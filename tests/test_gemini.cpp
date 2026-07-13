@@ -12,6 +12,7 @@ TEST_CASE("buildParsePrompt embeds the date and controlled vocabulary") {
     CHECK_THAT(prompt, ContainsSubstring("Monday"));
     CHECK_THAT(prompt, ContainsSubstring("\"cozy\""));
     CHECK_THAT(prompt, ContainsSubstring("\"navy\""));
+    CHECK_THAT(prompt, ContainsSubstring("\"striped\""));
     CHECK_THAT(prompt, ContainsSubstring("yarın işe gideceğim"));
 }
 
@@ -47,7 +48,8 @@ TEST_CASE("parseParsedRequestJson") {
     SECTION("full response") {
         const auto parsed = negiysem::parseParsedRequestJson(
             R"({"day_offset":1,"mood":"confident","occasion":"work",
-                "colors_preferred":["navy"],"colors_avoided":["pink"]})");
+                "colors_preferred":["navy"],"colors_avoided":["pink"],
+                "patterns_preferred":["striped"],"patterns_avoided":["floral"]})");
         CHECK(parsed.day_offset == 1);
         CHECK(parsed.mood_slug == "confident");
         CHECK(parsed.occasion == "work");
@@ -55,6 +57,10 @@ TEST_CASE("parseParsedRequestJson") {
         CHECK(parsed.colors_preferred[0] == "navy");
         REQUIRE(parsed.colors_avoided.size() == 1);
         CHECK(parsed.colors_avoided[0] == "pink");
+        REQUIRE(parsed.patterns_preferred.size() == 1);
+        CHECK(parsed.patterns_preferred[0] == "striped");
+        REQUIRE(parsed.patterns_avoided.size() == 1);
+        CHECK(parsed.patterns_avoided[0] == "floral");
     }
     SECTION("nulls become defaults") {
         const auto parsed = negiysem::parseParsedRequestJson(
@@ -71,11 +77,14 @@ TEST_CASE("parseParsedRequestJson") {
     SECTION("values outside the vocabulary are dropped") {
         const auto parsed = negiysem::parseParsedRequestJson(
             R"({"mood":"hangry","occasion":"moon-landing",
-                "colors_preferred":["navy","chartreuse"]})");
+                "colors_preferred":["navy","chartreuse"],
+                "patterns_preferred":["striped","tie-dye"]})");
         CHECK(parsed.mood_slug.empty());
         CHECK(parsed.occasion.empty());
         REQUIRE(parsed.colors_preferred.size() == 1);
         CHECK(parsed.colors_preferred[0] == "navy");
+        REQUIRE(parsed.patterns_preferred.size() == 1);
+        CHECK(parsed.patterns_preferred[0] == "striped");
     }
     SECTION("markdown fences are tolerated") {
         const auto parsed = negiysem::parseParsedRequestJson(
@@ -105,11 +114,12 @@ TEST_CASE("parseOpenMeteoDailyResponse") {
     }
 }
 
-TEST_CASE("colorAdjustment") {
-    using negiysem::colorAdjustment;
-    CHECK(colorAdjustment({"navy"}, {"navy"}, {}) == 0.3);
-    CHECK(colorAdjustment({"navy"}, {}, {"navy"}) == -0.5);
-    CHECK(colorAdjustment({"navy", "pink"}, {"navy"}, {"pink"}) == -0.5);  // avoided wins
-    CHECK(colorAdjustment({"gray"}, {"navy"}, {"pink"}) == 0.0);
-    CHECK(colorAdjustment({}, {"navy"}, {"pink"}) == 0.0);
+TEST_CASE("preferenceAdjustment") {
+    using negiysem::preferenceAdjustment;
+    CHECK(preferenceAdjustment({"navy"}, {"navy"}, {}) == 0.3);
+    CHECK(preferenceAdjustment({"navy"}, {}, {"navy"}) == -0.5);
+    CHECK(preferenceAdjustment({"navy", "pink"}, {"navy"}, {"pink"}) == -0.5);  // avoided wins
+    CHECK(preferenceAdjustment({"gray"}, {"navy"}, {"pink"}) == 0.0);
+    CHECK(preferenceAdjustment({}, {"navy"}, {"pink"}) == 0.0);
+    CHECK(preferenceAdjustment({"striped"}, {"striped"}, {}) == 0.3);  // patterns work the same
 }

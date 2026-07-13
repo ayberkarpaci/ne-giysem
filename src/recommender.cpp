@@ -33,15 +33,15 @@ double rainAdjustment(bool is_raining, bool is_waterproof) {
     return is_waterproof ? -0.2 : 0.0;
 }
 
-double colorAdjustment(const std::vector<std::string>& item_colors,
-                       const std::vector<std::string>& preferred,
-                       const std::vector<std::string>& avoided) {
+double preferenceAdjustment(const std::vector<std::string>& item_values,
+                            const std::vector<std::string>& preferred,
+                            const std::vector<std::string>& avoided) {
     double adjustment = 0.0;
-    for (const auto& color : item_colors) {
-        if (std::find(avoided.begin(), avoided.end(), color) != avoided.end()) {
+    for (const auto& value : item_values) {
+        if (std::find(avoided.begin(), avoided.end(), value) != avoided.end()) {
             return -0.5;  // avoided wins outright
         }
-        if (std::find(preferred.begin(), preferred.end(), color) != preferred.end()) {
+        if (std::find(preferred.begin(), preferred.end(), value) != preferred.end()) {
             adjustment = 0.3;
         }
     }
@@ -189,26 +189,34 @@ std::vector<RecommendedItem> Recommender::recommendFromWardrobe(
     sqlite3_bind_text(stmt, 1, request.mood_slug.c_str(), -1, SQLITE_TRANSIENT);
     sqlite3_bind_text(stmt, 2, request.lang.c_str(), -1, SQLITE_TRANSIENT);
 
-    // Colors per wardrobe item, for the preference adjustment.
+    // Colors and patterns per wardrobe item, for the preference adjustments.
     std::map<int, std::vector<std::string>> colors;
-    if (!request.colors_preferred.empty() || !request.colors_avoided.empty()) {
-        sqlite3_stmt* color_stmt = nullptr;
-        constexpr const char* kColorQuery = R"sql(
-            SELECT wa.wardrobe_item_id, v.slug
+    std::map<int, std::vector<std::string>> patterns;
+    const bool wants_colors =
+        !request.colors_preferred.empty() || !request.colors_avoided.empty();
+    const bool wants_patterns =
+        !request.patterns_preferred.empty() || !request.patterns_avoided.empty();
+    if (wants_colors || wants_patterns) {
+        sqlite3_stmt* attr_stmt = nullptr;
+        constexpr const char* kAttrQuery = R"sql(
+            SELECT wa.wardrobe_item_id, a.slug, v.slug
             FROM wardrobe_item_attributes wa
             JOIN attribute_values v ON v.id = wa.attribute_value_id
             JOIN attributes a ON a.id = v.attribute_id
-            WHERE a.slug = 'color';
+            WHERE a.slug IN ('color', 'pattern');
         )sql";
-        if (sqlite3_prepare_v2(db, kColorQuery, -1, &color_stmt, nullptr) != SQLITE_OK) {
+        if (sqlite3_prepare_v2(db, kAttrQuery, -1, &attr_stmt, nullptr) != SQLITE_OK) {
             sqlite3_finalize(stmt);
             throw std::runtime_error(std::string("prepare failed: ") + sqlite3_errmsg(db));
         }
-        while (sqlite3_step(color_stmt) == SQLITE_ROW) {
-            colors[sqlite3_column_int(color_stmt, 0)].emplace_back(
-                reinterpret_cast<const char*>(sqlite3_column_text(color_stmt, 1)));
+        while (sqlite3_step(attr_stmt) == SQLITE_ROW) {
+            const int wardrobe_id = sqlite3_column_int(attr_stmt, 0);
+            const std::string attr = reinterpret_cast<const char*>(sqlite3_column_text(attr_stmt, 1));
+            auto& target = attr == "color" ? colors : patterns;
+            target[wardrobe_id].emplace_back(
+                reinterpret_cast<const char*>(sqlite3_column_text(attr_stmt, 2)));
         }
-        sqlite3_finalize(color_stmt);
+        sqlite3_finalize(attr_stmt);
     }
 
     std::map<std::string, RecommendedItem> best;
@@ -222,8 +230,13 @@ std::vector<RecommendedItem> Recommender::recommendFromWardrobe(
         }
         const auto colors_it = colors.find(item.wardrobe_id);
         if (colors_it != colors.end()) {
-            item.score += colorAdjustment(colors_it->second, request.colors_preferred,
-                                          request.colors_avoided);
+            item.score += preferenceAdjustment(colors_it->second, request.colors_preferred,
+                                               request.colors_avoided);
+        }
+        const auto patterns_it = patterns.find(item.wardrobe_id);
+        if (patterns_it != patterns.end()) {
+            item.score += preferenceAdjustment(patterns_it->second, request.patterns_preferred,
+                                               request.patterns_avoided);
         }
         auto it = best.find(item.category_slug);
         if (it == best.end() || item.score > it->second.score) {

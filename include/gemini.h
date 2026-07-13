@@ -16,6 +16,8 @@ struct ParsedRequest {
     std::string occasion;                        // work|casual|sport|date|special, or empty
     std::vector<std::string> colors_preferred;   // color value slugs
     std::vector<std::string> colors_avoided;
+    std::vector<std::string> patterns_preferred; // pattern value slugs
+    std::vector<std::string> patterns_avoided;
 };
 
 // Pure helpers, exposed for unit testing.

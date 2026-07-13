@@ -94,6 +94,30 @@ TEST_CASE("expanded catalog supports jerseys with pattern and sleeve") {
     CHECK(items[0].values.size() == 3);
 }
 
+TEST_CASE("pattern preference steers the wardrobe pick") {
+    Database db = makeSeededDb();
+    WardrobeRepository repo(db);
+    repo.addItem("t-shirt", "plain tee", {"solid"});
+    repo.addItem("t-shirt", "striped tee", {"striped"});
+
+    RecommendationRequest request;
+    request.temperature_c = 25.0;
+    request.mood_slug = "relaxed";
+
+    // Same type and score, so which tee wins is unspecified without a
+    // preference; with one, the striped tee must win.
+    request.patterns_preferred = {"striped"};
+    auto outfit = Recommender(db).recommendFromWardrobe(request);
+    REQUIRE(outfit.size() == 1);
+    CHECK(outfit[0].item_name == "striped tee");
+
+    request.patterns_preferred.clear();
+    request.patterns_avoided = {"striped"};
+    outfit = Recommender(db).recommendFromWardrobe(request);
+    REQUIRE(outfit.size() == 1);
+    CHECK(outfit[0].item_name == "plain tee");
+}
+
 TEST_CASE("recommendFromWardrobe only uses owned garments") {
     Database db = makeSeededDb();
     WardrobeRepository repo(db);
