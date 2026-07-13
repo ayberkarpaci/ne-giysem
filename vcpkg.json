@@ -4,6 +4,8 @@
   "description": "Weather and mood based outfit recommendation system",
   "dependencies": [
     "sqlite3",
-    "catch2"
+    "catch2",
+    "cpr",
+    "nlohmann-json"
   ]
 }

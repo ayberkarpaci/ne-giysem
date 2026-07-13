@@ -17,21 +17,30 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 find_package(unofficial-sqlite3 CONFIG REQUIRED)
+find_package(cpr CONFIG REQUIRED)
+find_package(nlohmann_json CONFIG REQUIRED)
 
 add_library(negiysem_core STATIC
     src/database.cpp
     src/recommender.cpp
     src/seed.cpp
+    src/weather.cpp
 )
 target_include_directories(negiysem_core PUBLIC include)
-target_link_libraries(negiysem_core PUBLIC unofficial::sqlite3::sqlite3)
+target_link_libraries(negiysem_core
+    PUBLIC unofficial::sqlite3::sqlite3
+    PRIVATE cpr::cpr nlohmann_json::nlohmann_json
+)
 
 add_executable(ne-giysem src/main.cpp)
 target_link_libraries(ne-giysem PRIVATE negiysem_core)
 
 enable_testing()
 find_package(Catch2 3 CONFIG REQUIRED)
-add_executable(negiysem_tests tests/test_recommender.cpp)
+add_executable(negiysem_tests
+    tests/test_recommender.cpp
+    tests/test_weather.cpp
+)
 target_link_libraries(negiysem_tests PRIVATE negiysem_core Catch2::Catch2WithMain)
 include(Catch)
 catch_discover_tests(negiysem_tests)

@@ -24,9 +24,30 @@ The vcpkg toolchain path is set in `CMakeLists.txt`; override it with
 ```sh
 cmake -S . -B build
 cmake --build build
-./build/ne-giysem
+```
+
+## Usage
+
+```sh
+# Automatic: geolocates by IP (ip-api.com) and fetches current weather (open-meteo.com)
+ne-giysem [mood] [lang]
+
+# Manual weather
+ne-giysem <temp_c> <rain 0|1> [mood] [lang]
+```
+
+Moods: `energetic`, `cozy`, `confident`, `relaxed`, `adventurous`.
+Languages: `en`, `tr` (display names come from the `translations` table).
+
+Both weather APIs are free and require no API key.
+
+## Tests
+
+```sh
+ctest --test-dir build --output-on-failure
 ```
 
 ## Status
 
-Early scaffolding — no business logic yet.
+Core recommendation engine, SQLite catalog and automatic weather lookup are in place.
+Next up: web UI, then a mobile app with full i18n.
