@@ -1,0 +1,103 @@
+#include <catch2/catch_test_macros.hpp>
+#include <catch2/matchers/catch_matchers_string.hpp>
+
+#include "gemini.h"
+#include "weather.h"
+
+using Catch::Matchers::ContainsSubstring;
+
+TEST_CASE("buildParsePrompt embeds the date and controlled vocabulary") {
+    const auto prompt = negiysem::buildParsePrompt("yarın işe gideceğim", "2026-07-13", "Monday");
+    CHECK_THAT(prompt, ContainsSubstring("2026-07-13"));
+    CHECK_THAT(prompt, ContainsSubstring("Monday"));
+    CHECK_THAT(prompt, ContainsSubstring("\"cozy\""));
+    CHECK_THAT(prompt, ContainsSubstring("\"navy\""));
+    CHECK_THAT(prompt, ContainsSubstring("yarın işe gideceğim"));
+}
+
+TEST_CASE("extractGeminiText") {
+    SECTION("pulls the first candidate's text") {
+        const auto text = negiysem::extractGeminiText(
+            R"({"candidates":[{"content":{"parts":[{"text":"hello"}]}}]})");
+        CHECK(text == "hello");
+    }
+    SECTION("surfaces API errors") {
+        CHECK_THROWS(negiysem::extractGeminiText(
+            R"({"error":{"message":"API key not valid"}})"));
+    }
+    SECTION("rejects malformed responses") {
+        CHECK_THROWS(negiysem::extractGeminiText("not json"));
+        CHECK_THROWS(negiysem::extractGeminiText(R"({"candidates":[]})"));
+    }
+}
+
+TEST_CASE("parseParsedRequestJson") {
+    SECTION("full response") {
+        const auto parsed = negiysem::parseParsedRequestJson(
+            R"({"day_offset":1,"mood":"confident","occasion":"work",
+                "colors_preferred":["navy"],"colors_avoided":["pink"]})");
+        CHECK(parsed.day_offset == 1);
+        CHECK(parsed.mood_slug == "confident");
+        CHECK(parsed.occasion == "work");
+        REQUIRE(parsed.colors_preferred.size() == 1);
+        CHECK(parsed.colors_preferred[0] == "navy");
+        REQUIRE(parsed.colors_avoided.size() == 1);
+        CHECK(parsed.colors_avoided[0] == "pink");
+    }
+    SECTION("nulls become defaults") {
+        const auto parsed = negiysem::parseParsedRequestJson(
+            R"({"day_offset":0,"mood":null,"occasion":null,
+                "colors_preferred":[],"colors_avoided":[]})");
+        CHECK(parsed.day_offset == 0);
+        CHECK(parsed.mood_slug.empty());
+        CHECK(parsed.occasion.empty());
+    }
+    SECTION("out-of-range day offset is clamped") {
+        CHECK(negiysem::parseParsedRequestJson(R"({"day_offset":42})").day_offset == 6);
+        CHECK(negiysem::parseParsedRequestJson(R"({"day_offset":-3})").day_offset == 0);
+    }
+    SECTION("values outside the vocabulary are dropped") {
+        const auto parsed = negiysem::parseParsedRequestJson(
+            R"({"mood":"hangry","occasion":"moon-landing",
+                "colors_preferred":["navy","chartreuse"]})");
+        CHECK(parsed.mood_slug.empty());
+        CHECK(parsed.occasion.empty());
+        REQUIRE(parsed.colors_preferred.size() == 1);
+        CHECK(parsed.colors_preferred[0] == "navy");
+    }
+    SECTION("markdown fences are tolerated") {
+        const auto parsed = negiysem::parseParsedRequestJson(
+            "```json\n{\"day_offset\":2}\n```");
+        CHECK(parsed.day_offset == 2);
+    }
+}
+
+TEST_CASE("parseOpenMeteoDailyResponse") {
+    const std::string body = R"({"daily":{
+        "temperature_2m_max":[30.0,24.0,18.0],
+        "temperature_2m_min":[20.0,16.0,10.0],
+        "precipitation_sum":[0.0,3.2,0.0],
+        "weather_code":[1,61,3]}})";
+    SECTION("averages min and max for the requested day") {
+        const auto w = negiysem::parseOpenMeteoDailyResponse(body, 0);
+        CHECK(w.temperature_c == 25.0);
+        CHECK_FALSE(w.is_raining);
+    }
+    SECTION("rainy forecast day") {
+        const auto w = negiysem::parseOpenMeteoDailyResponse(body, 1);
+        CHECK(w.temperature_c == 20.0);
+        CHECK(w.is_raining);
+    }
+    SECTION("day beyond the forecast throws") {
+        CHECK_THROWS(negiysem::parseOpenMeteoDailyResponse(body, 5));
+    }
+}
+
+TEST_CASE("colorAdjustment") {
+    using negiysem::colorAdjustment;
+    CHECK(colorAdjustment({"navy"}, {"navy"}, {}) == 0.3);
+    CHECK(colorAdjustment({"navy"}, {}, {"navy"}) == -0.5);
+    CHECK(colorAdjustment({"navy", "pink"}, {"navy"}, {"pink"}) == -0.5);  // avoided wins
+    CHECK(colorAdjustment({"gray"}, {"navy"}, {"pink"}) == 0.0);
+    CHECK(colorAdjustment({}, {"navy"}, {"pink"}) == 0.0);
+}

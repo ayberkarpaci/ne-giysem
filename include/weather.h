@@ -15,10 +15,11 @@ struct Weather {
     bool is_raining = false;  // true for any wet precipitation (rain, showers, snow)
 };
 
-// Pure parsers, exposed for unit testing. Both throw std::runtime_error on
+// Pure parsers, exposed for unit testing. All throw std::runtime_error on
 // malformed or unsuccessful responses.
 Location parseIpApiResponse(const std::string& json_text);
 Weather parseOpenMeteoResponse(const std::string& json_text);
+Weather parseOpenMeteoDailyResponse(const std::string& json_text, int day_offset);
 
 // WMO weather interpretation codes used by Open-Meteo: drizzle, rain,
 // showers, snow and thunderstorms all count as wet.
@@ -35,6 +36,9 @@ public:
     // Current conditions at the given coordinates. Throws std::runtime_error
     // on network failure.
     Weather fetchCurrent(const Location& location) const;
+
+    // Forecast for a day 0 (today) .. 6 from now; day 0 uses fetchCurrent.
+    Weather fetchForecast(const Location& location, int day_offset) const;
 };
 
 }  // namespace negiysem

@@ -33,6 +33,21 @@ double rainAdjustment(bool is_raining, bool is_waterproof) {
     return is_waterproof ? -0.2 : 0.0;
 }
 
+double colorAdjustment(const std::vector<std::string>& item_colors,
+                       const std::vector<std::string>& preferred,
+                       const std::vector<std::string>& avoided) {
+    double adjustment = 0.0;
+    for (const auto& color : item_colors) {
+        if (std::find(avoided.begin(), avoided.end(), color) != avoided.end()) {
+            return -0.5;  // avoided wins outright
+        }
+        if (std::find(preferred.begin(), preferred.end(), color) != preferred.end()) {
+            adjustment = 0.3;
+        }
+    }
+    return adjustment;
+}
+
 namespace {
 
 // Score formula: mood affinity scales the temperature fit (an item that is
@@ -174,6 +189,28 @@ std::vector<RecommendedItem> Recommender::recommendFromWardrobe(
     sqlite3_bind_text(stmt, 1, request.mood_slug.c_str(), -1, SQLITE_TRANSIENT);
     sqlite3_bind_text(stmt, 2, request.lang.c_str(), -1, SQLITE_TRANSIENT);
 
+    // Colors per wardrobe item, for the preference adjustment.
+    std::map<int, std::vector<std::string>> colors;
+    if (!request.colors_preferred.empty() || !request.colors_avoided.empty()) {
+        sqlite3_stmt* color_stmt = nullptr;
+        constexpr const char* kColorQuery = R"sql(
+            SELECT wa.wardrobe_item_id, v.slug
+            FROM wardrobe_item_attributes wa
+            JOIN attribute_values v ON v.id = wa.attribute_value_id
+            JOIN attributes a ON a.id = v.attribute_id
+            WHERE a.slug = 'color';
+        )sql";
+        if (sqlite3_prepare_v2(db, kColorQuery, -1, &color_stmt, nullptr) != SQLITE_OK) {
+            sqlite3_finalize(stmt);
+            throw std::runtime_error(std::string("prepare failed: ") + sqlite3_errmsg(db));
+        }
+        while (sqlite3_step(color_stmt) == SQLITE_ROW) {
+            colors[sqlite3_column_int(color_stmt, 0)].emplace_back(
+                reinterpret_cast<const char*>(sqlite3_column_text(color_stmt, 1)));
+        }
+        sqlite3_finalize(color_stmt);
+    }
+
     std::map<std::string, RecommendedItem> best;
     while (sqlite3_step(stmt) == SQLITE_ROW) {
         RecommendedItem item = readScoredItem(stmt, request);
@@ -182,6 +219,11 @@ std::vector<RecommendedItem> Recommender::recommendFromWardrobe(
         item.photo_path = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 10));
         if (!label.empty()) {
             item.item_name = label;
+        }
+        const auto colors_it = colors.find(item.wardrobe_id);
+        if (colors_it != colors.end()) {
+            item.score += colorAdjustment(colors_it->second, request.colors_preferred,
+                                          request.colors_avoided);
         }
         auto it = best.find(item.category_slug);
         if (it == best.end() || item.score > it->second.score) {

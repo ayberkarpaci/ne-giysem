@@ -13,6 +13,10 @@ struct RecommendationRequest {
     bool is_raining = false;
     std::string mood_slug;   // must match a row in the moods table
     std::string lang = "en"; // BCP 47 code used to look up display names
+    // Color value slugs; only wardrobe items carry colors, so these only
+    // influence recommendFromWardrobe.
+    std::vector<std::string> colors_preferred;
+    std::vector<std::string> colors_avoided;
 };
 
 struct RecommendedItem {
@@ -37,6 +41,11 @@ double temperatureFit(double temp_c,
 // Bonus/penalty depending on rain and the item being waterproof. Waterproof
 // gear is boosted in rain and slightly penalized in dry weather.
 double rainAdjustment(bool is_raining, bool is_waterproof);
+
+// +0.3 if any of the item's colors is preferred, -0.5 if any is avoided.
+double colorAdjustment(const std::vector<std::string>& item_colors,
+                       const std::vector<std::string>& preferred,
+                       const std::vector<std::string>& avoided);
 
 // Picks the best-scoring item per category. Core categories (top, bottom,
 // footwear) are always present; optional ones (outerwear, accessory) only

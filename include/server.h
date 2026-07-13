@@ -18,6 +18,8 @@ std::string outfitToJson(const std::vector<RecommendedItem>& outfit,
 std::string moodsToJson(Database& db, const std::string& lang);
 
 // HTTP server: serves the static web UI plus a small JSON API.
+//   POST   /api/ask                          JSON {text, lang} -> Gemini-parsed
+//                                            request, outfit and explanation
 //   GET    /api/moods?lang=..
 //   GET    /api/recommendation?mood=..&lang=..[&temp=..&rain=0|1][&source=wardrobe]
 //   GET    /api/types?lang=..

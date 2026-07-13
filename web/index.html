@@ -16,6 +16,17 @@
     </header>
 
     <main>
+        <section class="card" id="ask-section">
+            <h2 data-i18n="ask_title">Tell me your plan</h2>
+            <textarea id="ask-input" rows="2" maxlength="300"></textarea>
+            <button id="ask-btn" data-i18n="ask">Suggest an outfit</button>
+            <div class="hidden" id="ask-result">
+                <div id="ask-weather-line" class="note"></div>
+                <ul id="ask-outfit-list" class="outfit"></ul>
+                <p id="ask-explanation"></p>
+            </div>
+        </section>
+
         <section class="card" id="mood-section">
             <h2 data-i18n="mood_title">How do you feel today?</h2>
             <div id="mood-chips" class="chips"></div>
@@ -28,9 +39,9 @@
         <button id="recommend-btn" data-i18n="recommend">What should I wear?</button>
 
         <section class="card hidden" id="result">
-            <div id="weather-line"></div>
+            <div id="weather-line" class="note"></div>
             <p id="source-note" class="note hidden" data-i18n="catalog_fallback"></p>
-            <ul id="outfit-list"></ul>
+            <ul id="outfit-list" class="outfit"></ul>
         </section>
 
         <section class="card" id="wardrobe-section">

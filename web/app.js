@@ -10,6 +10,11 @@ const STRINGS = {
         footer: "Weather by open-meteo.com · location by ip-api.com",
         use_wardrobe: "Recommend from my wardrobe",
         catalog_fallback: "Your wardrobe is empty, so this comes from the general catalog.",
+        ask_title: "Tell me your plan",
+        ask_placeholder: "e.g. going to work tomorrow, smart but comfy",
+        ask: "Suggest an outfit",
+        asking: "Thinking...",
+        ask_no_key: "The Gemini API key is not set up yet (see .env).",
         wardrobe_title: "My wardrobe",
         wardrobe_empty: "No items yet — add your first piece below!",
         add_item: "Add clothing item",
@@ -32,6 +37,11 @@ const STRINGS = {
         footer: "Hava durumu: open-meteo.com · konum: ip-api.com",
         use_wardrobe: "Gardırobumdan öner",
         catalog_fallback: "Gardırobun boş olduğu için bu öneri genel katalogdan geldi.",
+        ask_title: "Planını anlat",
+        ask_placeholder: "örn. yarın işe gideceğim, şık ama rahat olsun",
+        ask: "Kombin öner",
+        asking: "Düşünüyorum...",
+        ask_no_key: "Gemini API anahtarı henüz ayarlanmamış (.env dosyasına bak).",
         wardrobe_title: "Gardırobum",
         wardrobe_empty: "Henüz kıyafet yok — aşağıdan ilk parçanı ekle!",
         add_item: "Kıyafet ekle",
@@ -74,6 +84,34 @@ function applyStaticStrings() {
     document.querySelectorAll(".lang-switch button").forEach((btn) => {
         btn.classList.toggle("active", btn.dataset.lang === lang);
     });
+    $("ask-input").placeholder = t("ask_placeholder");
+}
+
+function renderOutfitList(listEl, items) {
+    listEl.innerHTML = "";
+    for (const item of items) {
+        const li = document.createElement("li");
+        const visual = document.createElement("span");
+        if (item.photo_url) {
+            const img = document.createElement("img");
+            img.src = item.photo_url;
+            img.alt = item.item_name;
+            img.className = "thumb";
+            visual.appendChild(img);
+        } else {
+            visual.className = "emoji";
+            visual.textContent = CATEGORY_EMOJI[item.category_slug] || "👔";
+        }
+        const text = document.createElement("span");
+        const category = document.createElement("span");
+        category.className = "category";
+        category.textContent = item.category_name;
+        const name = document.createElement("span");
+        name.textContent = item.item_name;
+        text.append(category, name);
+        li.append(visual, text);
+        listEl.appendChild(li);
+    }
 }
 
 async function fetchJson(url, options) {
@@ -119,31 +157,7 @@ async function recommend() {
         $("source-note").classList.toggle("hidden",
             !(useWardrobe && data.source === "catalog"));
 
-        const list = $("outfit-list");
-        list.innerHTML = "";
-        for (const item of data.outfit) {
-            const li = document.createElement("li");
-            const visual = document.createElement("span");
-            if (item.photo_url) {
-                const img = document.createElement("img");
-                img.src = item.photo_url;
-                img.alt = item.item_name;
-                img.className = "thumb";
-                visual.appendChild(img);
-            } else {
-                visual.className = "emoji";
-                visual.textContent = CATEGORY_EMOJI[item.category_slug] || "👔";
-            }
-            const text = document.createElement("span");
-            const category = document.createElement("span");
-            category.className = "category";
-            category.textContent = item.category_name;
-            const name = document.createElement("span");
-            name.textContent = item.item_name;
-            text.append(category, name);
-            li.append(visual, text);
-            list.appendChild(li);
-        }
+        renderOutfitList($("outfit-list"), data.outfit);
         $("result").classList.remove("hidden");
     } catch (err) {
         console.error(err);
@@ -151,6 +165,41 @@ async function recommend() {
     } finally {
         btn.disabled = false;
         btn.textContent = t("recommend");
+    }
+}
+
+async function ask() {
+    const text = $("ask-input").value.trim();
+    if (!text) return;
+    const btn = $("ask-btn");
+    btn.disabled = true;
+    btn.textContent = t("asking");
+    $("error").classList.add("hidden");
+    try {
+        const res = await fetch("/api/ask", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ text, lang }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+            showError(data.code === "no_api_key" ? t("ask_no_key") : t("error"));
+            return;
+        }
+        $("ask-weather-line").textContent = t("weather")(
+            Math.round(data.weather.temperature_c * 10) / 10,
+            data.weather.is_raining,
+            data.weather.city,
+        );
+        renderOutfitList($("ask-outfit-list"), data.outfit);
+        $("ask-explanation").textContent = data.explanation || "";
+        $("ask-result").classList.remove("hidden");
+    } catch (err) {
+        console.error(err);
+        showError(t("error"));
+    } finally {
+        btn.disabled = false;
+        btn.textContent = t("ask");
     }
 }
 
@@ -310,6 +359,13 @@ document.querySelectorAll(".lang-switch button").forEach((btn) => {
 });
 
 $("recommend-btn").addEventListener("click", recommend);
+$("ask-btn").addEventListener("click", ask);
+$("ask-input").addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        ask();
+    }
+});
 $("type-select").addEventListener("change", loadAttributes);
 $("save-btn").addEventListener("click", saveItem);
 

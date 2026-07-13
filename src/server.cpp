@@ -11,6 +11,8 @@
 #include <stdexcept>
 
 #include "database.h"
+#include "env.h"
+#include "gemini.h"
 #include "recommender.h"
 #include "wardrobe.h"
 #include "weather.h"
@@ -18,6 +20,25 @@
 namespace negiysem {
 
 using nlohmann::json;
+
+namespace {
+
+json itemToJson(const RecommendedItem& item) {
+    json entry = {
+        {"category_slug", item.category_slug},
+        {"category_name", item.category_name},
+        {"item_slug", item.item_slug},
+        {"item_name", item.item_name},
+        {"score", item.score},
+    };
+    if (item.wardrobe_id > 0) {
+        entry["wardrobe_id"] = item.wardrobe_id;
+        entry["photo_url"] = item.photo_path.empty() ? "" : "/photos/" + item.photo_path;
+    }
+    return entry;
+}
+
+}  // namespace
 
 std::string outfitToJson(const std::vector<RecommendedItem>& outfit,
                          double temperature_c,
@@ -27,19 +48,7 @@ std::string outfitToJson(const std::vector<RecommendedItem>& outfit,
                          const std::string& source) {
     json items = json::array();
     for (const auto& item : outfit) {
-        json entry = {
-            {"category_slug", item.category_slug},
-            {"category_name", item.category_name},
-            {"item_slug", item.item_slug},
-            {"item_name", item.item_name},
-            {"score", item.score},
-        };
-        if (item.wardrobe_id > 0) {
-            entry["wardrobe_id"] = item.wardrobe_id;
-            entry["photo_url"] =
-                item.photo_path.empty() ? "" : "/photos/" + item.photo_path;
-        }
-        items.push_back(std::move(entry));
+        items.push_back(itemToJson(item));
     }
     const json body = {
         {"weather", {{"temperature_c", temperature_c}, {"is_raining", is_raining}, {"city", city}}},
@@ -254,6 +263,80 @@ bool Server::run(int port) {
                             "application/json");
         } catch (const std::exception& e) {
             res.status = 400;
+            res.set_content(json{{"error", e.what()}}.dump(), "application/json");
+        }
+    });
+
+    server.Post("/api/ask", [this](const httplib::Request& req, httplib::Response& res) {
+        try {
+            const std::string api_key = getConfigValue("GEMINI_API_KEY");
+            if (api_key.empty()) {
+                res.status = 503;
+                res.set_content(
+                    json{{"error", "GEMINI_API_KEY is not set"}, {"code", "no_api_key"}}.dump(),
+                    "application/json");
+                return;
+            }
+            const json body = json::parse(req.body);
+            const std::string text = body.at("text").get<std::string>();
+            const std::string lang = body.value("lang", "en");
+
+            std::string model = getConfigValue("GEMINI_MODEL");
+            if (model.empty()) model = "gemini-2.5-flash";
+            const GeminiClient gemini(api_key, model);
+
+            const ParsedRequest parsed = gemini.parseUserRequest(text);
+
+            WeatherService weather_service;
+            const auto location = weather_service.detectLocation();
+            const auto weather = weather_service.fetchForecast(location, parsed.day_offset);
+
+            RecommendationRequest request;
+            request.temperature_c = weather.temperature_c;
+            request.is_raining = weather.is_raining;
+            request.mood_slug = parsed.mood_slug.empty() ? "relaxed" : parsed.mood_slug;
+            request.lang = lang;
+            request.colors_preferred = parsed.colors_preferred;
+            request.colors_avoided = parsed.colors_avoided;
+
+            const bool use_wardrobe = WardrobeRepository(db_).count() > 0;
+            const Recommender recommender(db_);
+            const auto outfit = use_wardrobe ? recommender.recommendFromWardrobe(request)
+                                             : recommender.recommend(request);
+
+            // The explanation is presentation only: if it fails, the outfit
+            // still goes out.
+            std::string explanation;
+            try {
+                explanation = gemini.explainOutfit(text, outfit, weather, lang);
+            } catch (const std::exception& e) {
+                std::cerr << "explanation failed: " << e.what() << std::endl;
+            }
+
+            json items = json::array();
+            for (const auto& item : outfit) {
+                items.push_back(itemToJson(item));
+            }
+            res.set_content(
+                json{
+                    {"weather",
+                     {{"temperature_c", weather.temperature_c},
+                      {"is_raining", weather.is_raining},
+                      {"city", location.city}}},
+                    {"parsed",
+                     {{"day_offset", parsed.day_offset},
+                      {"mood", request.mood_slug},
+                      {"occasion", parsed.occasion},
+                      {"colors_preferred", parsed.colors_preferred},
+                      {"colors_avoided", parsed.colors_avoided}}},
+                    {"source", use_wardrobe ? "wardrobe" : "catalog"},
+                    {"outfit", items},
+                    {"explanation", explanation},
+                }
+                    .dump(),
+                "application/json");
+        } catch (const std::exception& e) {
+            res.status = 500;
             res.set_content(json{{"error", e.what()}}.dump(), "application/json");
         }
     });
