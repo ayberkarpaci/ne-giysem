@@ -16,12 +16,12 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+find_package(unofficial-sqlite3 CONFIG REQUIRED)
+
 add_executable(ne-giysem
     src/main.cpp
+    src/database.cpp
 )
 
 target_include_directories(ne-giysem PRIVATE include)
-
-# Dependencies via vcpkg will be added here later, e.g.:
-# find_package(unofficial-sqlite3 CONFIG REQUIRED)
-# target_link_libraries(ne-giysem PRIVATE unofficial::sqlite3::sqlite3)
+target_link_libraries(ne-giysem PRIVATE unofficial::sqlite3::sqlite3)

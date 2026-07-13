@@ -1,0 +1,8 @@
+{
+  "name": "ne-giysem",
+  "version": "0.1.0",
+  "description": "Weather and mood based outfit recommendation system",
+  "dependencies": [
+    "sqlite3"
+  ]
+}
