@@ -76,6 +76,22 @@ TEST_CASE("attributesForType follows the category mapping") {
     for (const auto& def : forBottom) slugs.push_back(def.slug);
     CHECK(std::find(slugs.begin(), slugs.end(), "fit") != slugs.end());
     CHECK(std::find(slugs.begin(), slugs.end(), "collar") == slugs.end());
+    CHECK(std::find(slugs.begin(), slugs.end(), "pattern") != slugs.end());
+    CHECK(std::find(slugs.begin(), slugs.end(), "sleeve") == slugs.end());
+}
+
+TEST_CASE("expanded catalog supports jerseys with pattern and sleeve") {
+    Database db = makeSeededDb();
+    WardrobeRepository repo(db);
+
+    const int id = repo.addItem("jersey", "", {"striped", "short-sleeve", "red"});
+    CHECK(id > 0);
+
+    const auto items = repo.listItems("tr");
+    REQUIRE(items.size() == 1);
+    CHECK(items[0].type_name == "Forma");
+    CHECK(items[0].category_slug == "top");
+    CHECK(items[0].values.size() == 3);
 }
 
 TEST_CASE("recommendFromWardrobe only uses owned garments") {

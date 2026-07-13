@@ -40,7 +40,22 @@ INSERT OR IGNORE INTO clothing_items
     (16, 5, 'umbrella',      NULL, NULL, 1, 0),
     (17, 5, 'beanie',        -20,   8, 0, 3),
     (18, 5, 'sunglasses',     18,  45, 0, 0),
-    (19, 5, 'scarf',         -15,  10, 0, 3);
+    (19, 5, 'scarf',         -15,  10, 0, 3),
+    -- more tops
+    (20, 2, 'jersey',         12,  35, 0, 0),
+    (21, 2, 'polo-shirt',     16,  30, 0, 0),
+    (22, 2, 'cardigan',        6,  18, 0, 3),
+    -- more bottoms
+    (23, 3, 'leggings',        5,  22, 0, 1),
+    (24, 3, 'cargo-pants',     8,  26, 0, 2),
+    -- more footwear
+    (25, 4, 'loafers',        12,  30, 0, 0),
+    -- more outerwear
+    (26, 1, 'blazer',         12,  24, 0, 1),
+    (27, 1, 'wool-coat',     -10,  10, 0, 4),
+    -- more accessories
+    (28, 5, 'cap',            15,  45, 0, 0),
+    (29, 5, 'gloves',        -20,   5, 0, 4);
 
 INSERT OR IGNORE INTO moods (id, slug) VALUES
     (1, 'energetic'),
@@ -65,7 +80,19 @@ INSERT OR IGNORE INTO item_mood_affinity (item_id, mood_id, weight) VALUES
     (15, 3, 0.9),                           -- trench-coat: confident
     (17, 2, 0.6),                           -- beanie: cozy
     (18, 3, 0.5),                           -- sunglasses: confident
-    (19, 2, 0.7);                           -- scarf: cozy
+    (19, 2, 0.7),                           -- scarf: cozy
+    -- jersey stays below the t-shirt (0.6) so the generic catalog pick
+    -- remains the universal item; owned jerseys still win in wardrobe mode
+    (20, 1, 0.5), (20, 5, 0.4),             -- jersey: energetic, adventurous
+    (21, 3, 0.6), (21, 4, 0.5),             -- polo-shirt: confident, relaxed
+    (22, 2, 0.8),                           -- cardigan: cozy
+    (23, 1, 0.7),                           -- leggings: energetic
+    (24, 5, 0.8),                           -- cargo-pants: adventurous
+    (25, 3, 0.8),                           -- loafers: confident
+    (26, 3, 0.9),                           -- blazer: confident
+    (27, 3, 0.7), (27, 2, 0.5),             -- wool-coat: confident, cozy
+    (28, 1, 0.5), (28, 4, 0.4),             -- cap: energetic, relaxed
+    (29, 2, 0.5);                           -- gloves: cozy
 
 INSERT OR IGNORE INTO translations (entity_type, entity_id, lang_code, name) VALUES
     ('category', 1, 'en', 'Outerwear'),     ('category', 1, 'tr', 'Dış giyim'),
@@ -93,6 +120,16 @@ INSERT OR IGNORE INTO translations (entity_type, entity_id, lang_code, name) VAL
     ('item', 17, 'en', 'Beanie'),           ('item', 17, 'tr', 'Bere'),
     ('item', 18, 'en', 'Sunglasses'),       ('item', 18, 'tr', 'Güneş gözlüğü'),
     ('item', 19, 'en', 'Scarf'),            ('item', 19, 'tr', 'Atkı'),
+    ('item', 20, 'en', 'Jersey'),           ('item', 20, 'tr', 'Forma'),
+    ('item', 21, 'en', 'Polo shirt'),       ('item', 21, 'tr', 'Polo tişört'),
+    ('item', 22, 'en', 'Cardigan'),         ('item', 22, 'tr', 'Hırka'),
+    ('item', 23, 'en', 'Leggings'),         ('item', 23, 'tr', 'Tayt'),
+    ('item', 24, 'en', 'Cargo pants'),      ('item', 24, 'tr', 'Kargo pantolon'),
+    ('item', 25, 'en', 'Loafers'),          ('item', 25, 'tr', 'Loafer ayakkabı'),
+    ('item', 26, 'en', 'Blazer'),           ('item', 26, 'tr', 'Blazer ceket'),
+    ('item', 27, 'en', 'Wool coat'),        ('item', 27, 'tr', 'Yün palto'),
+    ('item', 28, 'en', 'Cap'),              ('item', 28, 'tr', 'Şapka'),
+    ('item', 29, 'en', 'Gloves'),           ('item', 29, 'tr', 'Eldiven'),
 
     ('mood', 1, 'en', 'Energetic'),         ('mood', 1, 'tr', 'Enerjik'),
     ('mood', 2, 'en', 'Cozy'),              ('mood', 2, 'tr', 'Keyifli'),
@@ -104,7 +141,9 @@ INSERT OR IGNORE INTO attributes (id, slug) VALUES
     (1, 'color'),
     (2, 'material'),
     (3, 'collar'),
-    (4, 'fit');
+    (4, 'fit'),
+    (5, 'pattern'),
+    (6, 'sleeve');
 
 INSERT OR IGNORE INTO category_attributes (category_id, attribute_id) VALUES
     -- color applies everywhere
@@ -113,7 +152,11 @@ INSERT OR IGNORE INTO category_attributes (category_id, attribute_id) VALUES
     (1, 2), (2, 2), (3, 2), (4, 2),
     -- collar only for tops, fit only for bottoms
     (2, 3),
-    (3, 4);
+    (3, 4),
+    -- pattern for everything except footwear
+    (1, 5), (2, 5), (3, 5), (5, 5),
+    -- sleeve only for tops
+    (2, 6);
 
 INSERT OR IGNORE INTO attribute_values (id, attribute_id, slug) VALUES
     (1,  1, 'black'),   (2,  1, 'white'),  (3,  1, 'gray'),
@@ -123,13 +166,20 @@ INSERT OR IGNORE INTO attribute_values (id, attribute_id, slug) VALUES
     (13, 2, 'cotton'),  (14, 2, 'linen'),  (15, 2, 'wool'),
     (16, 2, 'denim'),   (17, 2, 'leather'),(18, 2, 'synthetic'),
     (19, 3, 'crew-neck'), (20, 3, 'v-neck'), (21, 3, 'polo-collar'), (22, 3, 'turtleneck'),
-    (23, 4, 'slim-fit'),  (24, 4, 'regular-fit'), (25, 4, 'wide-leg');
+    (23, 4, 'slim-fit'),  (24, 4, 'regular-fit'), (25, 4, 'wide-leg'),
+    (26, 5, 'solid'),     (27, 5, 'striped'),    (28, 5, 'plaid'),
+    (29, 5, 'floral'),    (30, 5, 'polka-dot'),  (31, 5, 'graphic'),
+    (32, 5, 'camouflage'),
+    (33, 6, 'long-sleeve'), (34, 6, 'short-sleeve'), (35, 6, 'sleeveless'),
+    (36, 2, 'silk'),      (37, 2, 'corduroy');
 
 INSERT OR IGNORE INTO translations (entity_type, entity_id, lang_code, name) VALUES
     ('attribute', 1, 'en', 'Color'),        ('attribute', 1, 'tr', 'Renk'),
     ('attribute', 2, 'en', 'Material'),     ('attribute', 2, 'tr', 'Kumaş'),
     ('attribute', 3, 'en', 'Collar'),       ('attribute', 3, 'tr', 'Yaka'),
     ('attribute', 4, 'en', 'Fit'),          ('attribute', 4, 'tr', 'Kesim'),
+    ('attribute', 5, 'en', 'Pattern'),      ('attribute', 5, 'tr', 'Desen'),
+    ('attribute', 6, 'en', 'Sleeve'),       ('attribute', 6, 'tr', 'Kol'),
 
     ('attribute_value', 1,  'en', 'Black'),      ('attribute_value', 1,  'tr', 'Siyah'),
     ('attribute_value', 2,  'en', 'White'),      ('attribute_value', 2,  'tr', 'Beyaz'),
@@ -155,7 +205,19 @@ INSERT OR IGNORE INTO translations (entity_type, entity_id, lang_code, name) VAL
     ('attribute_value', 22, 'en', 'Turtleneck'), ('attribute_value', 22, 'tr', 'Balıkçı yaka'),
     ('attribute_value', 23, 'en', 'Slim fit'),   ('attribute_value', 23, 'tr', 'Dar kesim'),
     ('attribute_value', 24, 'en', 'Regular fit'),('attribute_value', 24, 'tr', 'Normal kesim'),
-    ('attribute_value', 25, 'en', 'Wide leg'),   ('attribute_value', 25, 'tr', 'Bol paça');
+    ('attribute_value', 25, 'en', 'Wide leg'),   ('attribute_value', 25, 'tr', 'Bol paça'),
+    ('attribute_value', 26, 'en', 'Solid'),      ('attribute_value', 26, 'tr', 'Düz'),
+    ('attribute_value', 27, 'en', 'Striped'),    ('attribute_value', 27, 'tr', 'Çizgili'),
+    ('attribute_value', 28, 'en', 'Plaid'),      ('attribute_value', 28, 'tr', 'Ekose'),
+    ('attribute_value', 29, 'en', 'Floral'),     ('attribute_value', 29, 'tr', 'Çiçekli'),
+    ('attribute_value', 30, 'en', 'Polka dot'),  ('attribute_value', 30, 'tr', 'Puantiyeli'),
+    ('attribute_value', 31, 'en', 'Graphic'),    ('attribute_value', 31, 'tr', 'Baskılı'),
+    ('attribute_value', 32, 'en', 'Camouflage'), ('attribute_value', 32, 'tr', 'Kamuflaj'),
+    ('attribute_value', 33, 'en', 'Long sleeve'),  ('attribute_value', 33, 'tr', 'Uzun kollu'),
+    ('attribute_value', 34, 'en', 'Short sleeve'), ('attribute_value', 34, 'tr', 'Kısa kollu'),
+    ('attribute_value', 35, 'en', 'Sleeveless'),   ('attribute_value', 35, 'tr', 'Kolsuz'),
+    ('attribute_value', 36, 'en', 'Silk'),       ('attribute_value', 36, 'tr', 'İpek'),
+    ('attribute_value', 37, 'en', 'Corduroy'),   ('attribute_value', 37, 'tr', 'Fitilli kadife');
 )sql";
 
 }  // namespace
