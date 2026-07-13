@@ -1,0 +1,39 @@
+# Build output
+build/
+out/
+cmake-build-*/
+
+# IDE / editor
+.vs/
+.vscode/
+.idea/
+*.swp
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# SQLite database files
+data/*.db
+data/*.sqlite
+data/*.sqlite3
+data/*.db-journal
+data/*.db-wal
+data/*.db-shm
+
+# vcpkg (if used in manifest mode)
+vcpkg_installed/
+
+# OS files
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# Compiled artifacts
+*.obj
+*.o
+*.exe
+*.dll
+*.lib
+*.pdb
