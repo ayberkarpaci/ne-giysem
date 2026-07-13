@@ -56,6 +56,48 @@ TEST_CASE("parseMoodWeightsJson") {
     }
 }
 
+TEST_CASE("garment classification") {
+    const std::vector<std::string> types = {"t-shirt", "jeans", "jersey"};
+    const negiysem::AttributeVocabulary vocabulary = {
+        {"color", {"black", "red"}},
+        {"pattern", {"solid", "striped"}},
+    };
+
+    SECTION("buildClassifyPrompt embeds both vocabularies") {
+        const auto prompt = negiysem::buildClassifyPrompt(types, vocabulary);
+        CHECK_THAT(prompt, ContainsSubstring("\"jersey\""));
+        CHECK_THAT(prompt, ContainsSubstring("color: [\"black\", \"red\"]"));
+        CHECK_THAT(prompt, ContainsSubstring("\"striped\""));
+    }
+    SECTION("parses type and values") {
+        const auto garment = negiysem::parseClassifiedGarmentJson(
+            R"({"type":"jersey","values":{"color":"red","pattern":"striped"}})",
+            types, vocabulary);
+        CHECK(garment.type_slug == "jersey");
+        REQUIRE(garment.values.size() == 2);
+        CHECK(garment.values.at("color") == "red");
+        CHECK(garment.values.at("pattern") == "striped");
+    }
+    SECTION("drops null, unknown and out-of-vocabulary values") {
+        const auto garment = negiysem::parseClassifiedGarmentJson(
+            R"({"type":"jeans","values":{"color":null,"pattern":"tie-dye","era":"90s"}})",
+            types, vocabulary);
+        CHECK(garment.type_slug == "jeans");
+        CHECK(garment.values.empty());
+    }
+    SECTION("throws when the type is missing or unknown") {
+        CHECK_THROWS(negiysem::parseClassifiedGarmentJson(
+            R"({"type":"spaceship","values":{}})", types, vocabulary));
+        CHECK_THROWS(negiysem::parseClassifiedGarmentJson(R"({"values":{}})", types, vocabulary));
+        CHECK_THROWS(negiysem::parseClassifiedGarmentJson("not json", types, vocabulary));
+    }
+    SECTION("markdown fences are tolerated") {
+        const auto garment = negiysem::parseClassifiedGarmentJson(
+            "```json\n{\"type\":\"t-shirt\"}\n```", types, vocabulary);
+        CHECK(garment.type_slug == "t-shirt");
+    }
+}
+
 TEST_CASE("extractGeminiText") {
     SECTION("pulls the first candidate's text") {
         const auto text = negiysem::extractGeminiText(

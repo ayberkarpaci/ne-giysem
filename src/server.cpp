@@ -117,6 +117,42 @@ std::string photoExtension(const std::string& content_type) {
     return "";
 }
 
+// Every garment type slug, for the photo classifier's vocabulary.
+std::vector<std::string> typeSlugs(Database& db) {
+    sqlite3_stmt* stmt = nullptr;
+    if (sqlite3_prepare_v2(db.handle(), "SELECT slug FROM clothing_items ORDER BY id;", -1,
+                           &stmt, nullptr) != SQLITE_OK) {
+        throw std::runtime_error(std::string("prepare failed: ") + sqlite3_errmsg(db.handle()));
+    }
+    std::vector<std::string> slugs;
+    while (sqlite3_step(stmt) == SQLITE_ROW) {
+        slugs.emplace_back(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 0)));
+    }
+    sqlite3_finalize(stmt);
+    return slugs;
+}
+
+// Allowed value slugs per attribute slug, for the photo classifier.
+AttributeVocabulary attributeVocabulary(Database& db) {
+    constexpr const char* sql = R"sql(
+        SELECT a.slug, v.slug
+        FROM attribute_values v
+        JOIN attributes a ON a.id = v.attribute_id
+        ORDER BY a.id, v.id;
+    )sql";
+    sqlite3_stmt* stmt = nullptr;
+    if (sqlite3_prepare_v2(db.handle(), sql, -1, &stmt, nullptr) != SQLITE_OK) {
+        throw std::runtime_error(std::string("prepare failed: ") + sqlite3_errmsg(db.handle()));
+    }
+    AttributeVocabulary vocabulary;
+    while (sqlite3_step(stmt) == SQLITE_ROW) {
+        vocabulary[reinterpret_cast<const char*>(sqlite3_column_text(stmt, 0))].emplace_back(
+            reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1)));
+    }
+    sqlite3_finalize(stmt);
+    return vocabulary;
+}
+
 const char* kPhotoDir = "data/photos";
 
 }  // namespace
@@ -362,6 +398,45 @@ bool Server::run(int port) {
                 }
                     .dump(),
                 "application/json");
+        } catch (const std::exception& e) {
+            res.status = 500;
+            res.set_content(json{{"error", e.what()}}.dump(), "application/json");
+        }
+    });
+
+    server.Post("/api/classify-photo",
+                [this](const httplib::Request& req, httplib::Response& res) {
+        try {
+            const std::string api_key = getConfigValue("GEMINI_API_KEY");
+            if (api_key.empty()) {
+                res.status = 503;
+                res.set_content(
+                    json{{"error", "GEMINI_API_KEY is not set"}, {"code", "no_api_key"}}.dump(),
+                    "application/json");
+                return;
+            }
+            const std::string content_type = req.get_header_value("Content-Type");
+            if (photoExtension(content_type).empty()) {
+                res.status = 415;
+                res.set_content(json{{"error", "expected image/jpeg, image/png or image/webp"}}
+                                    .dump(),
+                                "application/json");
+                return;
+            }
+
+            std::string model = getConfigValue("GEMINI_MODEL");
+            if (model.empty()) model = "gemini-flash-latest";
+            const ClassifiedGarment garment =
+                GeminiClient(api_key, model)
+                    .classifyGarment(req.body, content_type, typeSlugs(db_),
+                                     attributeVocabulary(db_));
+
+            json values = json::object();
+            for (const auto& [attribute, value] : garment.values) {
+                values[attribute] = value;
+            }
+            res.set_content(json{{"type", garment.type_slug}, {"values", values}}.dump(),
+                            "application/json");
         } catch (const std::exception& e) {
             res.status = 500;
             res.set_content(json{{"error", e.what()}}.dump(), "application/json");

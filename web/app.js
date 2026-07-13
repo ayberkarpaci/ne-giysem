@@ -30,6 +30,9 @@ const STRINGS = {
         saving: "Saving...",
         delete: "Delete",
         choose: "—",
+        classifying: "Reading the photo...",
+        classified: "✨ Filled in from the photo — check the fields and save.",
+        classify_error: "Could not recognize the photo; pick the fields yourself.",
     },
     tr: {
         mood_title: "Bugün nasıl hissediyorsun?",
@@ -62,6 +65,9 @@ const STRINGS = {
         saving: "Kaydediliyor...",
         delete: "Sil",
         choose: "—",
+        classifying: "Fotoğraf inceleniyor...",
+        classified: "✨ Fotoğraftan dolduruldu — alanları kontrol edip kaydet.",
+        classify_error: "Fotoğraf tanınamadı; alanları kendin seçebilirsin.",
     },
 };
 
@@ -334,6 +340,39 @@ async function loadWardrobe() {
     }
 }
 
+async function classifyPhoto() {
+    const file = $("photo-input").files[0];
+    const note = $("classify-note");
+    if (!file) {
+        note.classList.add("hidden");
+        return;
+    }
+    note.textContent = t("classifying");
+    note.classList.remove("hidden");
+    try {
+        const res = await fetch("/api/classify-photo", {
+            method: "POST",
+            headers: { "Content-Type": file.type },
+            body: file,
+        });
+        const data = await res.json();
+        if (!res.ok) {
+            note.textContent = data.code === "no_api_key" ? t("ask_no_key") : t("classify_error");
+            return;
+        }
+        $("type-select").value = data.type;
+        await loadAttributes();
+        for (const select of $("attribute-selects").querySelectorAll("select")) {
+            const value = data.values[select.dataset.attribute];
+            if (value) select.value = value;
+        }
+        note.textContent = t("classified");
+    } catch (err) {
+        console.error(err);
+        note.textContent = t("classify_error");
+    }
+}
+
 async function saveItem() {
     const btn = $("save-btn");
     btn.disabled = true;
@@ -365,6 +404,7 @@ async function saveItem() {
 
         $("label-input").value = "";
         $("photo-input").value = "";
+        $("classify-note").classList.add("hidden");
         await loadWardrobe();
     } catch (err) {
         console.error(err);
@@ -398,6 +438,7 @@ $("ask-input").addEventListener("keydown", (e) => {
     }
 });
 $("type-select").addEventListener("change", loadAttributes);
+$("photo-input").addEventListener("change", classifyPhoto);
 $("save-btn").addEventListener("click", saveItem);
 
 refreshAll().catch((err) => {

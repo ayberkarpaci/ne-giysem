@@ -35,6 +35,24 @@ bool contains(const std::vector<std::string>& values, const std::string& v) {
     return std::find(values.begin(), values.end(), v) != values.end();
 }
 
+// Standard base64, needed to embed photo bytes in the JSON request.
+std::string base64Encode(const std::string& bytes) {
+    static constexpr char kAlphabet[] =
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    std::string out;
+    out.reserve((bytes.size() + 2) / 3 * 4);
+    for (size_t i = 0; i < bytes.size(); i += 3) {
+        unsigned int chunk = static_cast<unsigned char>(bytes[i]) << 16;
+        if (i + 1 < bytes.size()) chunk |= static_cast<unsigned char>(bytes[i + 1]) << 8;
+        if (i + 2 < bytes.size()) chunk |= static_cast<unsigned char>(bytes[i + 2]);
+        out.push_back(kAlphabet[(chunk >> 18) & 0x3F]);
+        out.push_back(kAlphabet[(chunk >> 12) & 0x3F]);
+        out.push_back(i + 1 < bytes.size() ? kAlphabet[(chunk >> 6) & 0x3F] : '=');
+        out.push_back(i + 2 < bytes.size() ? kAlphabet[chunk & 0x3F] : '=');
+    }
+    return out;
+}
+
 // Gemini sometimes wraps JSON in markdown fences despite instructions.
 std::string stripCodeFences(std::string text) {
     const auto first_brace = text.find('{');
@@ -66,6 +84,22 @@ std::string buildParsePrompt(const std::string& user_text, const std::string& to
            << "}\n"
            << "Use null/empty when the request does not say. User request:\n"
            << user_text;
+    return prompt.str();
+}
+
+std::string buildClassifyPrompt(const std::vector<std::string>& type_slugs,
+                                const AttributeVocabulary& attribute_values) {
+    std::ostringstream prompt;
+    prompt << "You classify ONE clothing item shown in a photo for a wardrobe app.\n"
+           << "Garment types: [" << joinQuoted(type_slugs) << "]\n"
+           << "Attributes and their allowed values:\n";
+    for (const auto& [attribute, values] : attribute_values) {
+        prompt << "- " << attribute << ": [" << joinQuoted(values) << "]\n";
+    }
+    prompt << "Reply with ONLY a JSON object, no markdown, matching exactly:\n"
+           << "{\"type\": <garment type>, \"values\": {\"<attribute>\": <value or null>, ...}}\n"
+           << "Pick the closest type. For each attribute pick one allowed value, or null "
+              "when it is unclear, not visible or not applicable.";
     return prompt.str();
 }
 
@@ -154,25 +188,72 @@ MoodWeights parseMoodWeightsJson(const std::string& text) {
     return weights;
 }
 
-GeminiClient::GeminiClient(std::string api_key, std::string model)
-    : api_key_(std::move(api_key)), model_(std::move(model)) {}
+ClassifiedGarment parseClassifiedGarmentJson(const std::string& text,
+                                             const std::vector<std::string>& type_slugs,
+                                             const AttributeVocabulary& attribute_values) {
+    const json j = json::parse(stripCodeFences(text), nullptr, /*allow_exceptions=*/false);
+    if (j.is_discarded() || !j.is_object()) {
+        throw std::runtime_error("could not parse classification: " + text);
+    }
+    ClassifiedGarment garment;
+    if (!j.contains("type") || !j["type"].is_string() ||
+        !contains(type_slugs, j["type"].get<std::string>())) {
+        throw std::runtime_error("no garment recognized in: " + text);
+    }
+    garment.type_slug = j["type"];
+    if (j.contains("values") && j["values"].is_object()) {
+        for (const auto& [attribute, value] : j["values"].items()) {
+            const auto vocab_it = attribute_values.find(attribute);
+            if (vocab_it == attribute_values.end() || !value.is_string()) continue;
+            if (contains(vocab_it->second, value.get<std::string>())) {
+                garment.values[attribute] = value;
+            }
+        }
+    }
+    return garment;
+}
 
-std::string GeminiClient::generate(const std::string& prompt, bool json_response) const {
+namespace {
+
+// Shared POST to generateContent; `parts` may mix text and inline image data.
+std::string postGenerate(const std::string& api_key, const std::string& model,
+                         const json& parts, bool json_response) {
     json body = {
-        {"contents", json::array({json{{"parts", json::array({json{{"text", prompt}}})}}})},
+        {"contents", json::array({json{{"parts", parts}}})},
     };
     if (json_response) {
         body["generationConfig"] = {{"responseMimeType", "application/json"}};
     }
     cpr::Response r = cpr::Post(
-        cpr::Url{"https://generativelanguage.googleapis.com/v1beta/models/" + model_ +
+        cpr::Url{"https://generativelanguage.googleapis.com/v1beta/models/" + model +
                  ":generateContent"},
-        cpr::Header{{"Content-Type", "application/json"}, {"x-goog-api-key", api_key_}},
-        cpr::Body{body.dump()}, cpr::Timeout{20000});
+        cpr::Header{{"Content-Type", "application/json"}, {"x-goog-api-key", api_key}},
+        cpr::Body{body.dump()}, cpr::Timeout{30000});
     if (r.status_code == 0) {
         throw std::runtime_error("gemini request failed: " + r.error.message);
     }
     return extractGeminiText(r.text);
+}
+
+}  // namespace
+
+GeminiClient::GeminiClient(std::string api_key, std::string model)
+    : api_key_(std::move(api_key)), model_(std::move(model)) {}
+
+std::string GeminiClient::generate(const std::string& prompt, bool json_response) const {
+    return postGenerate(api_key_, model_, json::array({json{{"text", prompt}}}), json_response);
+}
+
+ClassifiedGarment GeminiClient::classifyGarment(const std::string& image_bytes,
+                                                const std::string& mime_type,
+                                                const std::vector<std::string>& type_slugs,
+                                                const AttributeVocabulary& attribute_values) const {
+    const json parts = json::array({
+        json{{"text", buildClassifyPrompt(type_slugs, attribute_values)}},
+        json{{"inlineData", {{"mimeType", mime_type}, {"data", base64Encode(image_bytes)}}}},
+    });
+    return parseClassifiedGarmentJson(postGenerate(api_key_, model_, parts, /*json_response=*/true),
+                                      type_slugs, attribute_values);
 }
 
 ParsedRequest GeminiClient::parseUserRequest(const std::string& user_text) const {

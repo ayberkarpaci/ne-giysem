@@ -1,5 +1,6 @@
 #pragma once
 
+#include <map>
 #include <string>
 #include <utility>
 #include <vector>
@@ -25,13 +26,28 @@ struct ParsedRequest {
 // descending. Slugs come from the moods table vocabulary.
 using MoodWeights = std::vector<std::pair<std::string, double>>;
 
+// Allowed value slugs per attribute slug, e.g. {"color": {"black", ...}}.
+using AttributeVocabulary = std::map<std::string, std::vector<std::string>>;
+
+// What Gemini reads off a garment photo, in database slugs.
+struct ClassifiedGarment {
+    std::string type_slug;                       // one of the clothing_items slugs
+    std::map<std::string, std::string> values;   // attribute slug -> value slug
+};
+
 // Pure helpers, exposed for unit testing.
 std::string buildParsePrompt(const std::string& user_text, const std::string& today_iso,
                              const std::string& weekday);
 std::string buildMoodPrompt(const std::string& user_text);
+std::string buildClassifyPrompt(const std::vector<std::string>& type_slugs,
+                                const AttributeVocabulary& attribute_values);
 std::string extractGeminiText(const std::string& api_response_json);
 ParsedRequest parseParsedRequestJson(const std::string& text);
 MoodWeights parseMoodWeightsJson(const std::string& text);
+// Throws when no valid garment type is found; invalid values are dropped.
+ClassifiedGarment parseClassifiedGarmentJson(const std::string& text,
+                                             const std::vector<std::string>& type_slugs,
+                                             const AttributeVocabulary& attribute_values);
 
 // Thin REST client for the Gemini API (generativelanguage.googleapis.com).
 class GeminiClient {
@@ -47,6 +63,13 @@ public:
     // "How do you feel today?" answer -> mood blend. May be empty when the
     // text says nothing about mood; throws on API or parse failure.
     MoodWeights analyzeMood(const std::string& user_text) const;
+
+    // Garment photo (raw bytes + content type) -> type and attribute slugs.
+    // Throws on API failure or when no garment is recognized.
+    ClassifiedGarment classifyGarment(const std::string& image_bytes,
+                                      const std::string& mime_type,
+                                      const std::vector<std::string>& type_slugs,
+                                      const AttributeVocabulary& attribute_values) const;
 
     // One friendly sentence (in `lang`) explaining the chosen outfit.
     std::string explainOutfit(const std::string& user_text,
