@@ -18,10 +18,20 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 find_package(unofficial-sqlite3 CONFIG REQUIRED)
 
-add_executable(ne-giysem
-    src/main.cpp
+add_library(negiysem_core STATIC
     src/database.cpp
+    src/recommender.cpp
+    src/seed.cpp
 )
+target_include_directories(negiysem_core PUBLIC include)
+target_link_libraries(negiysem_core PUBLIC unofficial::sqlite3::sqlite3)
 
-target_include_directories(ne-giysem PRIVATE include)
-target_link_libraries(ne-giysem PRIVATE unofficial::sqlite3::sqlite3)
+add_executable(ne-giysem src/main.cpp)
+target_link_libraries(ne-giysem PRIVATE negiysem_core)
+
+enable_testing()
+find_package(Catch2 3 CONFIG REQUIRED)
+add_executable(negiysem_tests tests/test_recommender.cpp)
+target_link_libraries(negiysem_tests PRIVATE negiysem_core Catch2::Catch2WithMain)
+include(Catch)
+catch_discover_tests(negiysem_tests)

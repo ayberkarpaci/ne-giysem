@@ -15,6 +15,8 @@ public:
 
     Database(const Database&) = delete;
     Database& operator=(const Database&) = delete;
+    Database(Database&& other) noexcept;
+    Database& operator=(Database&& other) noexcept;
 
     // Creates all tables if they do not exist yet.
     void initSchema();

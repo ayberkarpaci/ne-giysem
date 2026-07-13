@@ -61,6 +61,19 @@ Database::Database(const std::string& db_path) {
     execute("PRAGMA foreign_keys = ON;");
 }
 
+Database::Database(Database&& other) noexcept : db_(other.db_) {
+    other.db_ = nullptr;
+}
+
+Database& Database::operator=(Database&& other) noexcept {
+    if (this != &other) {
+        sqlite3_close(db_);
+        db_ = other.db_;
+        other.db_ = nullptr;
+    }
+    return *this;
+}
+
 Database::~Database() {
     sqlite3_close(db_);
 }
