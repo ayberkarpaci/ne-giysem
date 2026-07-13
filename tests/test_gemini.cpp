@@ -16,6 +16,46 @@ TEST_CASE("buildParsePrompt embeds the date and controlled vocabulary") {
     CHECK_THAT(prompt, ContainsSubstring("yarın işe gideceğim"));
 }
 
+TEST_CASE("buildMoodPrompt embeds the mood vocabulary and the answer") {
+    const auto prompt = negiysem::buildMoodPrompt("yorgunum ama mutluyum");
+    CHECK_THAT(prompt, ContainsSubstring("\"energetic\""));
+    CHECK_THAT(prompt, ContainsSubstring("\"adventurous\""));
+    CHECK_THAT(prompt, ContainsSubstring("yorgunum ama mutluyum"));
+}
+
+TEST_CASE("parseMoodWeightsJson") {
+    SECTION("reads weights sorted by weight descending") {
+        const auto weights = negiysem::parseMoodWeightsJson(
+            R"({"moods":{"relaxed":0.3,"cozy":0.7}})");
+        REQUIRE(weights.size() == 2);
+        CHECK(weights[0].first == "cozy");
+        CHECK(weights[0].second == 0.7);
+        CHECK(weights[1].first == "relaxed");
+        CHECK(weights[1].second == 0.3);
+    }
+    SECTION("drops unknown moods and clamps out-of-range weights") {
+        const auto weights = negiysem::parseMoodWeightsJson(
+            R"({"moods":{"hangry":0.9,"cozy":1.4,"relaxed":0.0}})");
+        REQUIRE(weights.size() == 1);
+        CHECK(weights[0].first == "cozy");
+        CHECK(weights[0].second == 1.0);
+    }
+    SECTION("an empty object means the text said nothing about mood") {
+        CHECK(negiysem::parseMoodWeightsJson(R"({"moods":{}})").empty());
+    }
+    SECTION("markdown fences are tolerated") {
+        const auto weights = negiysem::parseMoodWeightsJson(
+            "```json\n{\"moods\":{\"energetic\":1.0}}\n```");
+        REQUIRE(weights.size() == 1);
+        CHECK(weights[0].first == "energetic");
+    }
+    SECTION("rejects malformed responses") {
+        CHECK_THROWS(negiysem::parseMoodWeightsJson("not json"));
+        CHECK_THROWS(negiysem::parseMoodWeightsJson(R"({"no_moods_key":1})"));
+        CHECK_THROWS(negiysem::parseMoodWeightsJson(R"({"moods":[1,2]})"));
+    }
+}
+
 TEST_CASE("extractGeminiText") {
     SECTION("pulls the first candidate's text") {
         const auto text = negiysem::extractGeminiText(

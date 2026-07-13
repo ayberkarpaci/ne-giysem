@@ -157,7 +157,8 @@ main {
     display: block;
 }
 
-#ask-section textarea {
+#ask-section textarea,
+#mood-section textarea {
     width: 100%;
     padding: 0.6rem;
     border: 1px solid #d5d9e4;

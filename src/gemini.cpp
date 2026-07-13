@@ -69,6 +69,19 @@ std::string buildParsePrompt(const std::string& user_text, const std::string& to
     return prompt.str();
 }
 
+std::string buildMoodPrompt(const std::string& user_text) {
+    std::ostringstream prompt;
+    prompt << "The user was asked how they feel today and answered (any language):\n\""
+           << user_text << "\"\n"
+           << "Map their state of mind to weights over exactly these moods: ["
+           << joinQuoted(kMoods) << "].\n"
+           << "Reply with ONLY a JSON object, no markdown, matching exactly:\n"
+           << "{\"moods\": {\"<mood>\": <weight 0..1>, ...}}\n"
+           << "Use 1-3 moods that genuinely apply, weights summing to about 1. "
+              "Use an empty object if the answer says nothing about how they feel.";
+    return prompt.str();
+}
+
 std::string extractGeminiText(const std::string& api_response_json) {
     const json j = json::parse(api_response_json, nullptr, /*allow_exceptions=*/false);
     if (j.is_discarded()) {
@@ -125,6 +138,22 @@ ParsedRequest parseParsedRequestJson(const std::string& text) {
     return parsed;
 }
 
+MoodWeights parseMoodWeightsJson(const std::string& text) {
+    const json j = json::parse(stripCodeFences(text), nullptr, /*allow_exceptions=*/false);
+    if (j.is_discarded() || !j.is_object() || !j.contains("moods") || !j["moods"].is_object()) {
+        throw std::runtime_error("could not parse mood analysis: " + text);
+    }
+    MoodWeights weights;
+    for (const auto& [slug, value] : j["moods"].items()) {
+        if (!contains(kMoods, slug) || !value.is_number()) continue;
+        const double weight = std::clamp(value.get<double>(), 0.0, 1.0);
+        if (weight > 0.0) weights.emplace_back(slug, weight);
+    }
+    std::sort(weights.begin(), weights.end(),
+              [](const auto& a, const auto& b) { return a.second > b.second; });
+    return weights;
+}
+
 GeminiClient::GeminiClient(std::string api_key, std::string model)
     : api_key_(std::move(api_key)), model_(std::move(model)) {}
 
@@ -161,6 +190,10 @@ ParsedRequest GeminiClient::parseUserRequest(const std::string& user_text) const
 
     return parseParsedRequestJson(
         generate(buildParsePrompt(user_text, date, weekday), /*json_response=*/true));
+}
+
+MoodWeights GeminiClient::analyzeMood(const std::string& user_text) const {
+    return parseMoodWeightsJson(generate(buildMoodPrompt(user_text), /*json_response=*/true));
 }
 
 std::string GeminiClient::explainOutfit(const std::string& user_text,

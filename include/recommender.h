@@ -2,6 +2,7 @@
 
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace negiysem {
@@ -12,6 +13,10 @@ struct RecommendationRequest {
     double temperature_c = 15.0;
     bool is_raining = false;
     std::string mood_slug;   // must match a row in the moods table
+    // A blend of moods with weights (e.g. from Gemini's analysis of a
+    // free-text answer). When non-empty this takes precedence over
+    // mood_slug; {mood_slug, 1.0} and a plain mood_slug score identically.
+    std::vector<std::pair<std::string, double>> mood_weights;
     std::string lang = "en"; // BCP 47 code used to look up display names
     // Color/pattern value slugs; only wardrobe items carry attributes, so
     // these only influence recommendFromWardrobe.

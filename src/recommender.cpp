@@ -74,6 +74,59 @@ void ensureMoodExists(sqlite3* db, const std::string& mood_slug) {
     }
 }
 
+// The mood blend used for scoring: the explicit weights when given, the
+// single mood otherwise. Every slug is validated against the moods table.
+std::vector<std::pair<std::string, double>> resolveMoodWeights(
+    sqlite3* db, const RecommendationRequest& request) {
+    std::vector<std::pair<std::string, double>> weights = request.mood_weights;
+    if (weights.empty()) {
+        weights.emplace_back(request.mood_slug, 1.0);
+    }
+    for (const auto& [slug, _] : weights) {
+        ensureMoodExists(db, slug);
+    }
+    return weights;
+}
+
+// mood slug -> affinity weight, per item id.
+std::map<int, std::map<std::string, double>> loadAffinities(sqlite3* db) {
+    constexpr const char* kAffinityQuery = R"sql(
+        SELECT a.item_id, m.slug, a.weight
+        FROM item_mood_affinity a
+        JOIN moods m ON m.id = a.mood_id;
+    )sql";
+    sqlite3_stmt* stmt = nullptr;
+    if (sqlite3_prepare_v2(db, kAffinityQuery, -1, &stmt, nullptr) != SQLITE_OK) {
+        throw std::runtime_error(std::string("prepare failed: ") + sqlite3_errmsg(db));
+    }
+    std::map<int, std::map<std::string, double>> affinities;
+    while (sqlite3_step(stmt) == SQLITE_ROW) {
+        affinities[sqlite3_column_int(stmt, 0)]
+                  [reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1))] =
+            sqlite3_column_double(stmt, 2);
+    }
+    sqlite3_finalize(stmt);
+    return affinities;
+}
+
+// Weighted sum of the item's affinities over the requested mood blend.
+double blendedMoodWeight(const std::map<int, std::map<std::string, double>>& affinities,
+                         int item_id,
+                         const std::vector<std::pair<std::string, double>>& mood_weights) {
+    const auto item_it = affinities.find(item_id);
+    if (item_it == affinities.end()) {
+        return 0.0;
+    }
+    double total = 0.0;
+    for (const auto& [slug, user_weight] : mood_weights) {
+        const auto aff_it = item_it->second.find(slug);
+        if (aff_it != item_it->second.end()) {
+            total += user_weight * aff_it->second;
+        }
+    }
+    return total;
+}
+
 // Both queries share this column layout; the wardrobe query appends
 // w.id, w.label and w.photo_path after it.
 constexpr const char* kSharedColumns = R"sql(
@@ -82,7 +135,7 @@ SELECT i.slug,
        i.min_temp_c,
        i.max_temp_c,
        i.is_waterproof,
-       COALESCE(a.weight, 0.0),
+       i.id,
        COALESCE(ti.name, i.slug),
        COALESCE(tc.name, c.slug)
 )sql";
@@ -90,12 +143,10 @@ SELECT i.slug,
 const std::string kItemQuery = std::string(kSharedColumns) + R"sql(
 FROM clothing_items i
 JOIN clothing_categories c ON c.id = i.category_id
-LEFT JOIN moods m ON m.slug = ?1
-LEFT JOIN item_mood_affinity a ON a.item_id = i.id AND a.mood_id = m.id
 LEFT JOIN translations ti
-       ON ti.entity_type = 'item' AND ti.entity_id = i.id AND ti.lang_code = ?2
+       ON ti.entity_type = 'item' AND ti.entity_id = i.id AND ti.lang_code = ?1
 LEFT JOIN translations tc
-       ON tc.entity_type = 'category' AND tc.entity_id = c.id AND tc.lang_code = ?2;
+       ON tc.entity_type = 'category' AND tc.entity_id = c.id AND tc.lang_code = ?1;
 )sql";
 
 const std::string kWardrobeQuery = std::string(kSharedColumns) + R"sql(
@@ -103,17 +154,18 @@ const std::string kWardrobeQuery = std::string(kSharedColumns) + R"sql(
 FROM wardrobe_items w
 JOIN clothing_items i ON i.id = w.type_id
 JOIN clothing_categories c ON c.id = i.category_id
-LEFT JOIN moods m ON m.slug = ?1
-LEFT JOIN item_mood_affinity a ON a.item_id = i.id AND a.mood_id = m.id
 LEFT JOIN translations ti
-       ON ti.entity_type = 'item' AND ti.entity_id = i.id AND ti.lang_code = ?2
+       ON ti.entity_type = 'item' AND ti.entity_id = i.id AND ti.lang_code = ?1
 LEFT JOIN translations tc
-       ON tc.entity_type = 'category' AND tc.entity_id = c.id AND tc.lang_code = ?2;
+       ON tc.entity_type = 'category' AND tc.entity_id = c.id AND tc.lang_code = ?1;
 )sql";
 
 // Reads the shared columns and computes the score. Extra columns (if any)
 // are the caller's business.
-RecommendedItem readScoredItem(sqlite3_stmt* stmt, const RecommendationRequest& request) {
+RecommendedItem readScoredItem(sqlite3_stmt* stmt,
+                               const RecommendationRequest& request,
+                               const std::map<int, std::map<std::string, double>>& affinities,
+                               const std::vector<std::pair<std::string, double>>& mood_weights) {
     std::optional<double> min_c;
     std::optional<double> max_c;
     if (sqlite3_column_type(stmt, 2) != SQLITE_NULL) {
@@ -123,7 +175,8 @@ RecommendedItem readScoredItem(sqlite3_stmt* stmt, const RecommendationRequest& 
         max_c = sqlite3_column_double(stmt, 3);
     }
     const bool waterproof = sqlite3_column_int(stmt, 4) != 0;
-    const double mood_weight = sqlite3_column_double(stmt, 5);
+    const double mood_weight =
+        blendedMoodWeight(affinities, sqlite3_column_int(stmt, 5), mood_weights);
 
     RecommendedItem item;
     item.item_slug = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 0));
@@ -154,19 +207,19 @@ std::vector<RecommendedItem> pickOutfit(std::map<std::string, RecommendedItem>&&
 
 std::vector<RecommendedItem> Recommender::recommend(const RecommendationRequest& request) const {
     sqlite3* db = db_.handle();
-    ensureMoodExists(db, request.mood_slug);
+    const auto mood_weights = resolveMoodWeights(db, request);
+    const auto affinities = loadAffinities(db);
 
     sqlite3_stmt* stmt = nullptr;
     if (sqlite3_prepare_v2(db, kItemQuery.c_str(), -1, &stmt, nullptr) != SQLITE_OK) {
         throw std::runtime_error(std::string("prepare failed: ") + sqlite3_errmsg(db));
     }
-    sqlite3_bind_text(stmt, 1, request.mood_slug.c_str(), -1, SQLITE_TRANSIENT);
-    sqlite3_bind_text(stmt, 2, request.lang.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(stmt, 1, request.lang.c_str(), -1, SQLITE_TRANSIENT);
 
     // Best-scoring item per category.
     std::map<std::string, RecommendedItem> best;
     while (sqlite3_step(stmt) == SQLITE_ROW) {
-        RecommendedItem item = readScoredItem(stmt, request);
+        RecommendedItem item = readScoredItem(stmt, request, affinities, mood_weights);
         auto it = best.find(item.category_slug);
         if (it == best.end() || item.score > it->second.score) {
             best[item.category_slug] = std::move(item);
@@ -180,14 +233,14 @@ std::vector<RecommendedItem> Recommender::recommend(const RecommendationRequest&
 std::vector<RecommendedItem> Recommender::recommendFromWardrobe(
     const RecommendationRequest& request) const {
     sqlite3* db = db_.handle();
-    ensureMoodExists(db, request.mood_slug);
+    const auto mood_weights = resolveMoodWeights(db, request);
+    const auto affinities = loadAffinities(db);
 
     sqlite3_stmt* stmt = nullptr;
     if (sqlite3_prepare_v2(db, kWardrobeQuery.c_str(), -1, &stmt, nullptr) != SQLITE_OK) {
         throw std::runtime_error(std::string("prepare failed: ") + sqlite3_errmsg(db));
     }
-    sqlite3_bind_text(stmt, 1, request.mood_slug.c_str(), -1, SQLITE_TRANSIENT);
-    sqlite3_bind_text(stmt, 2, request.lang.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(stmt, 1, request.lang.c_str(), -1, SQLITE_TRANSIENT);
 
     // Colors and patterns per wardrobe item, for the preference adjustments.
     std::map<int, std::vector<std::string>> colors;
@@ -221,7 +274,7 @@ std::vector<RecommendedItem> Recommender::recommendFromWardrobe(
 
     std::map<std::string, RecommendedItem> best;
     while (sqlite3_step(stmt) == SQLITE_ROW) {
-        RecommendedItem item = readScoredItem(stmt, request);
+        RecommendedItem item = readScoredItem(stmt, request, affinities, mood_weights);
         item.wardrobe_id = sqlite3_column_int(stmt, 8);
         const std::string label = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 9));
         item.photo_path = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 10));

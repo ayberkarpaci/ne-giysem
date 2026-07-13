@@ -111,6 +111,44 @@ TEST_CASE("mood affinity breaks ties within a category") {
     CHECK(top->item_slug == "hoodie");  // cozy affinity 0.9 beats sweater's 0.8
 }
 
+TEST_CASE("mood blend") {
+    Database db = makeSeededDb();
+    RecommendationRequest request;
+    request.temperature_c = 16.0;
+    request.is_raining = false;
+
+    SECTION("a single full-weight mood matches the plain mood_slug path") {
+        request.mood_slug = "cozy";
+        const auto plain = Recommender(db).recommend(request);
+
+        request.mood_slug.clear();
+        request.mood_weights = {{"cozy", 1.0}};
+        const auto blended = Recommender(db).recommend(request);
+
+        REQUIRE(plain.size() == blended.size());
+        for (size_t i = 0; i < plain.size(); ++i) {
+            CHECK(plain[i].item_slug == blended[i].item_slug);
+        }
+    }
+    SECTION("the dominant mood steers the pick") {
+        request.mood_weights = {{"cozy", 0.7}, {"confident", 0.3}};
+        const auto cozy_outfit = Recommender(db).recommend(request);
+        const auto* top = findCategory(cozy_outfit, "top");
+        REQUIRE(top != nullptr);
+        CHECK(top->item_slug == "hoodie");
+
+        request.mood_weights = {{"confident", 0.7}, {"cozy", 0.3}};
+        const auto confident_outfit = Recommender(db).recommend(request);
+        const auto* top2 = findCategory(confident_outfit, "top");
+        REQUIRE(top2 != nullptr);
+        CHECK(top2->item_slug == "shirt");
+    }
+    SECTION("unknown mood in the blend throws") {
+        request.mood_weights = {{"hangry", 1.0}};
+        CHECK_THROWS(Recommender(db).recommend(request));
+    }
+}
+
 TEST_CASE("display names use the requested language with slug fallback") {
     Database db = makeSeededDb();
     RecommendationRequest request;

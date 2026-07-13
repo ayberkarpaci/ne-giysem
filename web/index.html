@@ -29,6 +29,8 @@
 
         <section class="card" id="mood-section">
             <h2 data-i18n="mood_title">How do you feel today?</h2>
+            <textarea id="feel-input" rows="2" maxlength="300"></textarea>
+            <p class="note" data-i18n="mood_quick">...or pick one quickly:</p>
             <div id="mood-chips" class="chips"></div>
             <label class="toggle hidden" id="wardrobe-toggle">
                 <input type="checkbox" id="use-wardrobe" checked>
@@ -40,6 +42,7 @@
 
         <section class="card hidden" id="result">
             <div id="weather-line" class="note"></div>
+            <div id="mood-line" class="note hidden"></div>
             <p id="source-note" class="note hidden" data-i18n="catalog_fallback"></p>
             <ul id="outfit-list" class="outfit"></ul>
         </section>

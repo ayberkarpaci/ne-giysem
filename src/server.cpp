@@ -8,6 +8,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <map>
 #include <stdexcept>
 
 #include "database.h"
@@ -85,6 +86,28 @@ std::string moodsToJson(Database& db, const std::string& lang) {
 }
 
 namespace {
+
+// slug -> localized display name for every mood.
+std::map<std::string, std::string> moodNames(Database& db, const std::string& lang) {
+    constexpr const char* sql = R"sql(
+        SELECT m.slug, COALESCE(t.name, m.slug)
+        FROM moods m
+        LEFT JOIN translations t
+               ON t.entity_type = 'mood' AND t.entity_id = m.id AND t.lang_code = ?1;
+    )sql";
+    sqlite3_stmt* stmt = nullptr;
+    if (sqlite3_prepare_v2(db.handle(), sql, -1, &stmt, nullptr) != SQLITE_OK) {
+        throw std::runtime_error(std::string("prepare failed: ") + sqlite3_errmsg(db.handle()));
+    }
+    sqlite3_bind_text(stmt, 1, lang.c_str(), -1, SQLITE_TRANSIENT);
+    std::map<std::string, std::string> names;
+    while (sqlite3_step(stmt) == SQLITE_ROW) {
+        names[reinterpret_cast<const char*>(sqlite3_column_text(stmt, 0))] =
+            reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1));
+    }
+    sqlite3_finalize(stmt);
+    return names;
+}
 
 // Maps an uploaded image content type to a file extension; empty if unsupported.
 std::string photoExtension(const std::string& content_type) {
@@ -336,6 +359,78 @@ bool Server::run(int port) {
                     {"source", use_wardrobe ? "wardrobe" : "catalog"},
                     {"outfit", items},
                     {"explanation", explanation},
+                }
+                    .dump(),
+                "application/json");
+        } catch (const std::exception& e) {
+            res.status = 500;
+            res.set_content(json{{"error", e.what()}}.dump(), "application/json");
+        }
+    });
+
+    server.Post("/api/feel", [this](const httplib::Request& req, httplib::Response& res) {
+        try {
+            const std::string api_key = getConfigValue("GEMINI_API_KEY");
+            if (api_key.empty()) {
+                res.status = 503;
+                res.set_content(
+                    json{{"error", "GEMINI_API_KEY is not set"}, {"code", "no_api_key"}}.dump(),
+                    "application/json");
+                return;
+            }
+            const json body = json::parse(req.body);
+            const std::string text = body.at("text").get<std::string>();
+            const std::string lang = body.value("lang", "en");
+
+            std::string model = getConfigValue("GEMINI_MODEL");
+            if (model.empty()) model = "gemini-flash-latest";
+            MoodWeights weights = GeminiClient(api_key, model).analyzeMood(text);
+            if (weights.empty()) {
+                weights = {{"relaxed", 1.0}};  // the text said nothing about mood
+            }
+
+            WeatherService weather_service;
+            const auto location = weather_service.detectLocation();
+            const auto weather = weather_service.fetchCurrent(location);
+
+            RecommendationRequest request;
+            request.temperature_c = weather.temperature_c;
+            request.is_raining = weather.is_raining;
+            request.mood_weights = weights;
+            request.mood_slug = weights.front().first;  // for the response only
+            request.lang = lang;
+
+            std::string source = body.value("source", "catalog");
+            if (source == "wardrobe" && WardrobeRepository(db_).count() == 0) {
+                source = "catalog";
+            }
+            const Recommender recommender(db_);
+            const auto outfit = source == "wardrobe"
+                                    ? recommender.recommendFromWardrobe(request)
+                                    : recommender.recommend(request);
+            if (source != "wardrobe") source = "catalog";
+
+            const auto names = moodNames(db_, lang);
+            json moods = json::array();
+            for (const auto& [slug, weight] : weights) {
+                const auto name_it = names.find(slug);
+                moods.push_back({{"slug", slug},
+                                 {"name", name_it != names.end() ? name_it->second : slug},
+                                 {"weight", weight}});
+            }
+            json items = json::array();
+            for (const auto& item : outfit) {
+                items.push_back(itemToJson(item));
+            }
+            res.set_content(
+                json{
+                    {"weather",
+                     {{"temperature_c", weather.temperature_c},
+                      {"is_raining", weather.is_raining},
+                      {"city", location.city}}},
+                    {"moods", moods},
+                    {"source", source},
+                    {"outfit", items},
                 }
                     .dump(),
                 "application/json");

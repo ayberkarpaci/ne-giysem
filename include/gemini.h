@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "recommender.h"
@@ -20,11 +21,17 @@ struct ParsedRequest {
     std::vector<std::string> patterns_avoided;
 };
 
+// A mood blend, e.g. {{"cozy", 0.7}, {"relaxed", 0.3}}, sorted by weight
+// descending. Slugs come from the moods table vocabulary.
+using MoodWeights = std::vector<std::pair<std::string, double>>;
+
 // Pure helpers, exposed for unit testing.
 std::string buildParsePrompt(const std::string& user_text, const std::string& today_iso,
                              const std::string& weekday);
+std::string buildMoodPrompt(const std::string& user_text);
 std::string extractGeminiText(const std::string& api_response_json);
 ParsedRequest parseParsedRequestJson(const std::string& text);
+MoodWeights parseMoodWeightsJson(const std::string& text);
 
 // Thin REST client for the Gemini API (generativelanguage.googleapis.com).
 class GeminiClient {
@@ -36,6 +43,10 @@ public:
     // Free text -> structured request. Throws std::runtime_error on API or
     // parse failure.
     ParsedRequest parseUserRequest(const std::string& user_text) const;
+
+    // "How do you feel today?" answer -> mood blend. May be empty when the
+    // text says nothing about mood; throws on API or parse failure.
+    MoodWeights analyzeMood(const std::string& user_text) const;
 
     // One friendly sentence (in `lang`) explaining the chosen outfit.
     std::string explainOutfit(const std::string& user_text,

@@ -1,6 +1,11 @@
 const STRINGS = {
     en: {
         mood_title: "How do you feel today?",
+        feel_placeholder: "e.g. tired after a long week, but excited for tonight",
+        mood_quick: "...or pick one quickly:",
+        mood_line: (moods) =>
+            "How you seem to feel: " +
+            moods.map((m) => `${m.name} ${Math.round(m.weight * 100)}%`).join(" · "),
         recommend: "What should I wear?",
         loading: "Checking the weather...",
         weather: (t, rainy, city) =>
@@ -28,6 +33,11 @@ const STRINGS = {
     },
     tr: {
         mood_title: "Bugün nasıl hissediyorsun?",
+        feel_placeholder: "örn. yorucu bir hafta oldu ama akşam için heyecanlıyım",
+        mood_quick: "...ya da hızlıca seç:",
+        mood_line: (moods) =>
+            "Anladığım ruh hâli: " +
+            moods.map((m) => `%${Math.round(m.weight * 100)} ${m.name}`).join(" · "),
         recommend: "Ne giysem?",
         loading: "Hava durumuna bakılıyor...",
         weather: (t, rainy, city) =>
@@ -85,6 +95,7 @@ function applyStaticStrings() {
         btn.classList.toggle("active", btn.dataset.lang === lang);
     });
     $("ask-input").placeholder = t("ask_placeholder");
+    $("feel-input").placeholder = t("feel_placeholder");
 }
 
 function renderOutfitList(listEl, items) {
@@ -131,6 +142,7 @@ async function loadMoods() {
         btn.classList.toggle("selected", m.slug === mood);
         btn.addEventListener("click", () => {
             mood = m.slug;
+            $("feel-input").value = "";  // the quick pick replaces the free text
             chips.querySelectorAll("button").forEach((b) =>
                 b.classList.toggle("selected", b === btn));
         });
@@ -146,8 +158,27 @@ async function recommend() {
     try {
         const useWardrobe = wardrobeCount > 0 && $("use-wardrobe").checked;
         const source = useWardrobe ? "wardrobe" : "catalog";
-        const data = await fetchJson(
-            `/api/recommendation?mood=${mood}&lang=${lang}&source=${source}`);
+        const feeling = $("feel-input").value.trim();
+
+        let data;
+        if (feeling) {
+            const res = await fetch("/api/feel", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ text: feeling, lang, source }),
+            });
+            data = await res.json();
+            if (!res.ok) {
+                showError(data.code === "no_api_key" ? t("ask_no_key") : t("error"));
+                return;
+            }
+            $("mood-line").textContent = t("mood_line")(data.moods);
+        }
+        else {
+            data = await fetchJson(
+                `/api/recommendation?mood=${mood}&lang=${lang}&source=${source}`);
+        }
+        $("mood-line").classList.toggle("hidden", !feeling);
 
         $("weather-line").textContent = t("weather")(
             Math.round(data.weather.temperature_c * 10) / 10,
