@@ -160,6 +160,117 @@ main {
     text-align: center;
 }
 
+.note {
+    font-size: 0.85rem;
+    color: var(--muted);
+    margin-bottom: 0.5rem;
+}
+
+.toggle {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: 0.9rem;
+    font-size: 0.95rem;
+    cursor: pointer;
+}
+
+#wardrobe-list {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
+}
+
+#wardrobe-list li {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    background: var(--bg);
+    border-radius: 0.75rem;
+    padding: 0.6rem 0.9rem;
+}
+
+#wardrobe-list .grow {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+.thumb {
+    width: 2.6rem;
+    height: 2.6rem;
+    object-fit: cover;
+    border-radius: 0.5rem;
+    display: block;
+}
+
+.delete-btn {
+    border: none;
+    background: transparent;
+    color: var(--muted);
+    font-size: 1rem;
+    cursor: pointer;
+    padding: 0.25rem;
+}
+
+.delete-btn:hover {
+    color: #c0392b;
+}
+
+#add-form summary {
+    cursor: pointer;
+    font-weight: 600;
+    color: var(--accent);
+}
+
+.form-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    margin-top: 0.75rem;
+}
+
+.form-grid label {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    font-size: 0.9rem;
+    color: var(--muted);
+}
+
+.form-grid select,
+.form-grid input[type="text"] {
+    padding: 0.5rem;
+    border: 1px solid #d5d9e4;
+    border-radius: 0.5rem;
+    font-size: 0.95rem;
+    background: #fff;
+    color: var(--text);
+}
+
+#attribute-selects {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.75rem;
+}
+
+#save-btn {
+    border: none;
+    background: var(--accent);
+    color: #fff;
+    font-weight: 600;
+    padding: 0.6rem;
+    border-radius: 0.6rem;
+    cursor: pointer;
+}
+
+#save-btn:disabled {
+    opacity: 0.6;
+    cursor: wait;
+}
+
 .hidden {
     display: none;
 }

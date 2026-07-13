@@ -41,11 +41,48 @@ CREATE TABLE IF NOT EXISTS item_mood_affinity (
 
 -- Localized display names for any slug-bearing entity.
 CREATE TABLE IF NOT EXISTS translations (
-    entity_type TEXT NOT NULL,           -- 'category' | 'item' | 'mood'
+    entity_type TEXT NOT NULL,           -- 'category' | 'item' | 'mood' | 'attribute' | 'attribute_value'
     entity_id   INTEGER NOT NULL,
     lang_code   TEXT NOT NULL,           -- BCP 47, e.g. 'en', 'tr'
     name        TEXT NOT NULL,
     PRIMARY KEY (entity_type, entity_id, lang_code)
+);
+
+-- Detail dimensions a garment can have (color, material, collar, fit).
+CREATE TABLE IF NOT EXISTS attributes (
+    id   INTEGER PRIMARY KEY,
+    slug TEXT NOT NULL UNIQUE
+);
+
+-- Which attributes make sense for which category (collar only for tops, ...).
+CREATE TABLE IF NOT EXISTS category_attributes (
+    category_id  INTEGER NOT NULL REFERENCES clothing_categories(id),
+    attribute_id INTEGER NOT NULL REFERENCES attributes(id),
+    PRIMARY KEY (category_id, attribute_id)
+);
+
+-- Controlled vocabulary per attribute; slugs are globally unique so a bare
+-- value slug (e.g. 'navy') is unambiguous.
+CREATE TABLE IF NOT EXISTS attribute_values (
+    id           INTEGER PRIMARY KEY,
+    attribute_id INTEGER NOT NULL REFERENCES attributes(id),
+    slug         TEXT NOT NULL UNIQUE
+);
+
+-- The user's own garments. The type points into the clothing_items catalog,
+-- which supplies temperature range, waterproofness and mood affinities.
+CREATE TABLE IF NOT EXISTS wardrobe_items (
+    id         INTEGER PRIMARY KEY,
+    type_id    INTEGER NOT NULL REFERENCES clothing_items(id),
+    label      TEXT,                     -- optional user-given name
+    photo_path TEXT,                     -- file name under data/photos/
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS wardrobe_item_attributes (
+    wardrobe_item_id   INTEGER NOT NULL REFERENCES wardrobe_items(id) ON DELETE CASCADE,
+    attribute_value_id INTEGER NOT NULL REFERENCES attribute_values(id),
+    PRIMARY KEY (wardrobe_item_id, attribute_value_id)
 );
 )sql";
 

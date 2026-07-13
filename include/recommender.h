@@ -21,6 +21,9 @@ struct RecommendedItem {
     std::string category_slug;
     std::string category_name;  // localized, falls back to slug
     double score = 0.0;
+    // Set only when the item comes from the user's wardrobe.
+    int wardrobe_id = 0;
+    std::string photo_path;
 };
 
 // Scoring building blocks, exposed for unit testing.
@@ -46,6 +49,12 @@ public:
 
     // Throws std::runtime_error if the mood slug is unknown.
     std::vector<RecommendedItem> recommend(const RecommendationRequest& request) const;
+
+    // Same scoring, but over the user's own garments. Categories the user
+    // owns nothing in are simply absent from the result. Item names prefer
+    // the user's label, falling back to the localized type name.
+    std::vector<RecommendedItem> recommendFromWardrobe(
+        const RecommendationRequest& request) const;
 
 private:
     Database& db_;
