@@ -7,6 +7,7 @@
 #include "database.h"
 #include "recommender.h"
 #include "seed.h"
+#include "server.h"
 #include "weather.h"
 
 namespace {
@@ -15,6 +16,7 @@ void printUsage(const char* program) {
     std::cout << "Usage:\n"
               << "  " << program << " [mood] [lang]                weather fetched automatically\n"
               << "  " << program << " <temp_c> <rain 0|1> [mood] [lang]   manual weather\n"
+              << "  " << program << " serve [port]                 web UI + JSON API (default port 8080)\n"
               << "  mood: energetic | cozy | confident | relaxed | adventurous (default cozy)\n"
               << "  lang: display language, e.g. en or tr (default en)\n";
 }
@@ -38,6 +40,14 @@ int main(int argc, char* argv[]) {
     }
 
     try {
+        if (argc > 1 && std::string(argv[1]) == "serve") {
+            const int port = argc > 2 ? std::atoi(argv[2]) : 8080;
+            negiysem::Database db("data/ne-giysem.db");
+            db.initSchema();
+            negiysem::seedDatabase(db);
+            return negiysem::Server(db, "web").run(port) ? 0 : 1;
+        }
+
         if (argc > 1 && isNumber(argv[1])) {
             // Manual mode: temp and rain from the command line.
             request.temperature_c = std::atof(argv[1]);

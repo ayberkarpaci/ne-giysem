@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>ne giysem?</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header>
+        <h1>ne giysem?</h1>
+        <div class="lang-switch" role="group" aria-label="Language">
+            <button data-lang="en" class="active">EN</button>
+            <button data-lang="tr">TR</button>
+        </div>
+    </header>
+
+    <main>
+        <section class="card" id="mood-section">
+            <h2 data-i18n="mood_title">How do you feel today?</h2>
+            <div id="mood-chips" class="chips"></div>
+        </section>
+
+        <button id="recommend-btn" data-i18n="recommend">What should I wear?</button>
+
+        <section class="card hidden" id="result">
+            <div id="weather-line"></div>
+            <ul id="outfit-list"></ul>
+        </section>
+
+        <p id="error" class="error hidden"></p>
+    </main>
+
+    <footer data-i18n="footer">Weather by open-meteo.com &middot; location by ip-api.com</footer>
+
+    <script src="app.js"></script>
+</body>
+</html>

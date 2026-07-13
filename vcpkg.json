@@ -6,6 +6,7 @@
     "sqlite3",
     "catch2",
     "cpr",
-    "nlohmann-json"
+    "nlohmann-json",
+    "cpp-httplib"
   ]
 }

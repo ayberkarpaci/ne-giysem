@@ -34,7 +34,13 @@ ne-giysem [mood] [lang]
 
 # Manual weather
 ne-giysem <temp_c> <rain 0|1> [mood] [lang]
+
+# Web UI + JSON API on http://localhost:8080 (run from the repo root)
+ne-giysem serve [port]
 ```
+
+API endpoints: `GET /api/moods?lang=..` and
+`GET /api/recommendation?mood=..&lang=..[&temp=..&rain=0|1]`.
 
 Moods: `energetic`, `cozy`, `confident`, `relaxed`, `adventurous`.
 Languages: `en`, `tr` (display names come from the `translations` table).
@@ -49,5 +55,5 @@ ctest --test-dir build --output-on-failure
 
 ## Status
 
-Core recommendation engine, SQLite catalog and automatic weather lookup are in place.
-Next up: web UI, then a mobile app with full i18n.
+Core engine, SQLite catalog, automatic weather lookup and a bilingual (EN/TR)
+web UI are in place. Next up: a mobile app with full i18n.
