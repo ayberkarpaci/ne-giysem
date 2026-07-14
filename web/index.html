@@ -15,15 +15,22 @@
         </div>
     </header>
 
-    <main>
+    <nav class="tabs" role="tablist">
+        <button class="tab active" data-tab="home" data-i18n="tab_home">Outfit</button>
+        <button class="tab" data-tab="wardrobe">
+            <span data-i18n="tab_wardrobe">My wardrobe</span><span id="wardrobe-count" class="count hidden"></span>
+        </button>
+    </nav>
+
+    <main id="tab-home">
         <section class="card" id="ask-section">
             <h2 data-i18n="ask_title">Tell me your plan</h2>
             <textarea id="ask-input" rows="2" maxlength="300"></textarea>
-            <button id="ask-btn" data-i18n="ask">Suggest an outfit</button>
+            <button id="ask-btn" class="btn" data-i18n="ask">Suggest an outfit</button>
             <div class="hidden" id="ask-result">
                 <div id="ask-weather-line" class="note"></div>
                 <ul id="ask-outfit-list" class="outfit"></ul>
-                <p id="ask-explanation"></p>
+                <p id="ask-explanation" class="reason"></p>
                 <div class="feedback" id="ask-feedback-box"></div>
             </div>
         </section>
@@ -93,13 +100,27 @@
             <div class="feedback" id="feedback-box"></div>
         </section>
 
+        <p id="error" class="error hidden"></p>
+    </main>
+
+    <main id="tab-wardrobe" class="hidden">
+        <section class="card" id="bulk-section">
+            <h2 data-i18n="bulk_title">Add many at once</h2>
+            <p class="note" data-i18n="bulk_hint">Pick several garment photos — each one is recognized and saved automatically.</p>
+            <label class="btn file-btn">
+                <input type="file" id="bulk-input" accept="image/jpeg,image/png,image/webp" multiple hidden>
+                <span data-i18n="bulk_pick">📸 Choose photos</span>
+            </label>
+            <ul id="bulk-progress" class="bulk-progress"></ul>
+        </section>
+
         <section class="card" id="wardrobe-section">
             <h2 data-i18n="wardrobe_title">My wardrobe</h2>
             <p id="wardrobe-empty" class="note" data-i18n="wardrobe_empty"></p>
-            <ul id="wardrobe-list"></ul>
+            <div id="wardrobe-groups"></div>
 
             <details id="add-form">
-                <summary data-i18n="add_item">Add clothing item</summary>
+                <summary data-i18n="add_item">Add a single item</summary>
                 <div class="form-grid">
                     <label>
                         <span data-i18n="photo_label">Photo (optional)</span>
@@ -115,12 +136,12 @@
                         <span data-i18n="label_label">Name (optional)</span>
                         <input type="text" id="label-input" maxlength="60">
                     </label>
-                    <button id="save-btn" data-i18n="save">Save</button>
+                    <button id="save-btn" class="btn" data-i18n="save">Save</button>
                 </div>
             </details>
         </section>
 
-        <p id="error" class="error hidden"></p>
+        <p id="wardrobe-error" class="error hidden"></p>
     </main>
 
     <footer data-i18n="footer">Weather by open-meteo.com &middot; location by ip-api.com</footer>

@@ -46,7 +46,7 @@ const STRINGS = {
         ask_no_key: "The Gemini API key is not set up yet (see .env).",
         wardrobe_title: "My wardrobe",
         wardrobe_empty: "No items yet — add your first piece below!",
-        add_item: "Add clothing item",
+        add_item: "Add a single item",
         type_label: "Type",
         label_label: "Name (optional)",
         photo_label: "Photo (optional)",
@@ -63,6 +63,14 @@ const STRINGS = {
         feedback_thanks: "Thanks! I'll learn from this.",
         revised_note: "Not your style — here's another idea:",
         feedback_error: "Could not send the feedback.",
+        tab_home: "Outfit",
+        tab_wardrobe: "My wardrobe",
+        bulk_title: "Add many at once",
+        bulk_hint: "Pick several garment photos — each one is recognized and saved automatically.",
+        bulk_pick: "📸 Choose photos",
+        bulk_reading: "recognizing...",
+        bulk_saved: "added",
+        bulk_failed: "not recognized — add it manually below",
     },
     tr: {
         mood_title: "Bugün nasıl hissediyorsun?",
@@ -111,7 +119,7 @@ const STRINGS = {
         ask_no_key: "Gemini API anahtarı henüz ayarlanmamış (.env dosyasına bak).",
         wardrobe_title: "Gardırobum",
         wardrobe_empty: "Henüz kıyafet yok — aşağıdan ilk parçanı ekle!",
-        add_item: "Kıyafet ekle",
+        add_item: "Tek kıyafet ekle",
         type_label: "Tür",
         label_label: "İsim (isteğe bağlı)",
         photo_label: "Fotoğraf (isteğe bağlı)",
@@ -128,6 +136,14 @@ const STRINGS = {
         feedback_thanks: "Teşekkürler! Bundan ders çıkaracağım.",
         revised_note: "Beğenmedin — işte başka bir fikir:",
         feedback_error: "Geri bildirim gönderilemedi.",
+        tab_home: "Kombin",
+        tab_wardrobe: "Gardırobum",
+        bulk_title: "Toplu kıyafet ekle",
+        bulk_hint: "Birden fazla kıyafet fotoğrafı seç — her biri otomatik tanınıp kaydedilir.",
+        bulk_pick: "📸 Fotoğrafları seç",
+        bulk_reading: "tanınıyor...",
+        bulk_saved: "eklendi",
+        bulk_failed: "tanınamadı — aşağıdan elle ekleyebilirsin",
     },
 };
 
@@ -151,9 +167,9 @@ const $ = (id) => document.getElementById(id);
 const t = (key) => STRINGS[lang][key];
 const hh = (h) => String(h).padStart(2, "0") + ":00";
 
-function showError(message) {
-    $("error").textContent = message;
-    $("error").classList.remove("hidden");
+function showError(message, target = "error") {
+    $(target).textContent = message;
+    $(target).classList.remove("hidden");
 }
 
 function applyStaticStrings() {
@@ -494,8 +510,12 @@ async function ask() {
     }
 }
 
+let typeNames = {};  // type slug -> localized name, for the bulk progress list
+
 async function loadTypes() {
     const data = await fetchJson(`/api/types?lang=${lang}`);
+    typeNames = {};
+    for (const type of data.types) typeNames[type.slug] = type.name;
     const select = $("type-select");
     select.innerHTML = "";
     const groups = new Map();
@@ -595,57 +615,146 @@ async function loadAttributes() {
     setAttributeValues(previous);
 }
 
+// Fixed display order for the wardrobe groups.
+const CATEGORY_ORDER = ["outerwear", "top", "bottom", "footwear", "accessory", "jewelry"];
+
 async function loadWardrobe() {
     const data = await fetchJson(`/api/wardrobe?lang=${lang}`);
     wardrobeCount = data.items.length;
     $("wardrobe-empty").classList.toggle("hidden", wardrobeCount > 0);
     $("wardrobe-toggle").classList.toggle("hidden", wardrobeCount === 0);
+    $("wardrobe-count").textContent = wardrobeCount;
+    $("wardrobe-count").classList.toggle("hidden", wardrobeCount === 0);
 
-    const list = $("wardrobe-list");
-    list.innerHTML = "";
+    // Group the items by category, in a fixed category order.
+    const groups = new Map();
     for (const item of data.items) {
-        const li = document.createElement("li");
-
-        const visual = document.createElement("span");
-        if (item.photo_url) {
-            const img = document.createElement("img");
-            img.src = item.photo_url;
-            img.alt = item.label || item.type_name;
-            img.className = "thumb";
-            visual.appendChild(img);
-        } else {
-            visual.className = "emoji";
-            visual.textContent = CATEGORY_EMOJI[item.category_slug] || "👔";
+        if (!groups.has(item.category_slug)) {
+            groups.set(item.category_slug, { name: item.category_name, items: [] });
         }
-
-        const text = document.createElement("span");
-        text.className = "grow";
-        const name = document.createElement("span");
-        name.textContent = item.label || item.type_name;
-        const details = document.createElement("span");
-        details.className = "category";
-        const parts = item.values.map((v) => v.name);
-        if (item.label) parts.unshift(item.type_name);
-        details.textContent = parts.join(" · ");
-        text.append(name, details);
-
-        const del = document.createElement("button");
-        del.className = "delete-btn";
-        del.textContent = "✕";
-        del.title = t("delete");
-        del.addEventListener("click", async () => {
-            try {
-                await fetchJson(`/api/wardrobe/${item.id}`, { method: "DELETE" });
-                await loadWardrobe();
-            } catch (err) {
-                console.error(err);
-                showError(t("error"));
-            }
-        });
-
-        li.append(visual, text, del);
-        list.appendChild(li);
+        groups.get(item.category_slug).items.push(item);
     }
+
+    const container = $("wardrobe-groups");
+    container.innerHTML = "";
+    const ordered = [...groups.keys()].sort(
+        (a, b) => CATEGORY_ORDER.indexOf(a) - CATEGORY_ORDER.indexOf(b));
+    for (const slug of ordered) {
+        const group = groups.get(slug);
+        const title = document.createElement("h3");
+        title.className = "group-title";
+        title.textContent =
+            `${CATEGORY_EMOJI[slug] || "👔"} ${group.name} (${group.items.length})`;
+        container.appendChild(title);
+
+        const grid = document.createElement("ul");
+        grid.className = "wardrobe-grid";
+        for (const item of group.items) {
+            grid.appendChild(wardrobeCard(item));
+        }
+        container.appendChild(grid);
+    }
+}
+
+function wardrobeCard(item) {
+    const li = document.createElement("li");
+
+    const visual = document.createElement("div");
+    visual.className = "card-visual";
+    if (item.photo_url) {
+        const img = document.createElement("img");
+        img.src = item.photo_url;
+        img.alt = item.label || item.type_name;
+        img.loading = "lazy";
+        visual.appendChild(img);
+    } else {
+        visual.classList.add("emoji");
+        visual.textContent = CATEGORY_EMOJI[item.category_slug] || "👔";
+    }
+
+    const name = document.createElement("span");
+    name.className = "card-name";
+    name.textContent = item.label || item.type_name;
+    const details = document.createElement("span");
+    details.className = "category";
+    const parts = item.values.map((v) => v.name);
+    if (item.label) parts.unshift(item.type_name);
+    details.textContent = parts.join(" · ");
+
+    const del = document.createElement("button");
+    del.className = "delete-btn";
+    del.textContent = "✕";
+    del.title = t("delete");
+    del.addEventListener("click", async () => {
+        try {
+            await fetchJson(`/api/wardrobe/${item.id}`, { method: "DELETE" });
+            await loadWardrobe();
+        } catch (err) {
+            console.error(err);
+            showError(t("error"), "wardrobe-error");
+        }
+    });
+
+    li.append(visual, name, details, del);
+    return li;
+}
+
+// Bulk add: classify and save each selected photo, reporting per-file
+// progress. Files are processed one by one to keep the API load gentle.
+async function bulkUpload() {
+    const files = [...$("bulk-input").files];
+    if (files.length === 0) return;
+    $("bulk-input").value = "";
+    const progress = $("bulk-progress");
+    progress.innerHTML = "";
+
+    for (const file of files) {
+        const li = document.createElement("li");
+        const label = document.createElement("span");
+        label.textContent = file.name;
+        const status = document.createElement("span");
+        status.className = "bulk-status";
+        status.textContent = t("bulk_reading");
+        li.append(label, status);
+        progress.appendChild(li);
+
+        try {
+            const res = await fetch("/api/classify-photo", {
+                method: "POST",
+                headers: { "Content-Type": file.type },
+                body: file,
+            });
+            const classified = await res.json();
+            if (!res.ok) {
+                status.textContent =
+                    classified.code === "no_api_key" ? t("ask_no_key") : t("bulk_failed");
+                li.classList.add("failed");
+                continue;
+            }
+            const created = await fetchJson("/api/wardrobe", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    type: classified.type,
+                    label: "",
+                    values: Object.values(classified.values).flat(),
+                }),
+            });
+            await fetchJson(`/api/wardrobe/${created.id}/photo`, {
+                method: "PUT",
+                headers: { "Content-Type": file.type },
+                body: file,
+            });
+            status.textContent =
+                `✓ ${typeNames[classified.type] || classified.type} ${t("bulk_saved")}`;
+            li.classList.add("done");
+        } catch (err) {
+            console.error(err);
+            status.textContent = t("bulk_failed");
+            li.classList.add("failed");
+        }
+    }
+    await loadWardrobe();
 }
 
 async function classifyPhoto() {
@@ -682,7 +791,7 @@ async function saveItem() {
     const btn = $("save-btn");
     btn.disabled = true;
     btn.textContent = t("saving");
-    $("error").classList.add("hidden");
+    $("wardrobe-error").classList.add("hidden");
     try {
         const values = Object.values(selectedAttributeValues()).flat();
         const body = {
@@ -711,7 +820,7 @@ async function saveItem() {
         await loadWardrobe();
     } catch (err) {
         console.error(err);
-        showError(t("save_error"));
+        showError(t("save_error"), "wardrobe-error");
     } finally {
         btn.disabled = false;
         btn.textContent = t("save");
@@ -731,6 +840,21 @@ document.querySelectorAll(".lang-switch button").forEach((btn) => {
         if (!$("result").classList.contains("hidden")) await recommend();
     });
 });
+
+function showTab(name) {
+    document.querySelectorAll(".tabs .tab").forEach((btn) =>
+        btn.classList.toggle("active", btn.dataset.tab === name));
+    $("tab-home").classList.toggle("hidden", name !== "home");
+    $("tab-wardrobe").classList.toggle("hidden", name !== "wardrobe");
+    localStorage.setItem("tab", name);
+}
+
+document.querySelectorAll(".tabs .tab").forEach((btn) => {
+    btn.addEventListener("click", () => showTab(btn.dataset.tab));
+});
+showTab(localStorage.getItem("tab") || "home");
+
+$("bulk-input").addEventListener("change", bulkUpload);
 
 $("recommend-btn").addEventListener("click", recommend);
 $("ask-btn").addEventListener("click", ask);
