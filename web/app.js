@@ -133,7 +133,7 @@ const CATEGORY_EMOJI = {
 };
 
 let lang = localStorage.getItem("lang") || "en";
-let mood = "cozy";
+let mood = null;  // no quick-pick selected until the user chooses one
 let wardrobeCount = 0;
 // User-corrected location {city, latitude, longitude}; null = detect by IP.
 let savedLocation = JSON.parse(localStorage.getItem("location") || "null");
@@ -390,10 +390,11 @@ async function loadMoods() {
         btn.dataset.slug = m.slug;
         btn.classList.toggle("selected", m.slug === mood);
         btn.addEventListener("click", () => {
-            mood = m.slug;
-            $("feel-input").value = "";  // the quick pick replaces the free text
+            // Clicking the selected chip deselects it again (no mood bias).
+            mood = mood === m.slug ? null : m.slug;
+            if (mood) $("feel-input").value = "";  // the pick replaces free text
             chips.querySelectorAll("button").forEach((b) =>
-                b.classList.toggle("selected", b === btn));
+                b.classList.toggle("selected", b === btn && mood !== null));
         });
         chips.appendChild(btn);
     }
@@ -425,8 +426,9 @@ async function recommend() {
             $("mood-line").textContent = t("mood_line")(data.moods);
         }
         else {
+            const moodParam = mood ? `&mood=${mood}` : "";
             data = await fetchJson(
-                `/api/recommendation?mood=${mood}&lang=${lang}&source=${source}` +
+                `/api/recommendation?lang=${lang}&source=${source}${moodParam}` +
                 weatherQueryString());
         }
         $("mood-line").classList.toggle("hidden", !feeling);

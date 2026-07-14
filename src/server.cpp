@@ -325,7 +325,8 @@ bool Server::run(int port) {
     server.Get("/api/recommendation", [this](const httplib::Request& req, httplib::Response& res) {
         try {
             RecommendationRequest request;
-            request.mood_slug = req.has_param("mood") ? req.get_param_value("mood") : "cozy";
+            // No mood parameter means no mood bias, not a default mood.
+            request.mood_slug = req.get_param_value("mood");
             request.lang = req.has_param("lang") ? req.get_param_value("lang") : "en";
 
             const WeatherReport weather = resolveWeather(overridesFromParams(req), 0);
@@ -675,8 +676,7 @@ bool Server::run(int port) {
             if (rating <= 2) {
                 const auto stored = repo.recommendation(id);
                 RecommendationRequest request;
-                request.mood_slug =
-                    stored->mood_slug.empty() ? "relaxed" : stored->mood_slug;
+                request.mood_slug = stored->mood_slug;  // empty = no mood bias
                 request.temperature_c = stored->temperature_c;
                 request.is_raining = stored->is_raining;
                 request.lang = body.value("lang", stored->lang);

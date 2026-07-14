@@ -171,6 +171,19 @@ TEST_CASE("display names use the requested language with slug fallback") {
     }
 }
 
+TEST_CASE("no mood at all recommends purely by weather") {
+    Database db = makeSeededDb();
+    RecommendationRequest request;
+    request.temperature_c = 32.0;
+    request.is_raining = false;
+    // mood_slug stays empty: the user skipped the question.
+
+    const auto outfit = Recommender(db).recommend(request);
+    const auto* top = findCategory(outfit, "top");
+    REQUIRE(top != nullptr);
+    CHECK_THAT(top->score, WithinAbs(1.0, 1e-9));  // temperature fit only
+}
+
 TEST_CASE("unknown mood throws") {
     Database db = makeSeededDb();
     RecommendationRequest request;

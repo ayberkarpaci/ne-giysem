@@ -12,7 +12,7 @@ class Database;
 struct RecommendationRequest {
     double temperature_c = 15.0;
     bool is_raining = false;
-    std::string mood_slug;   // must match a row in the moods table
+    std::string mood_slug;   // a row in the moods table, or empty for no mood bias
     // A blend of moods with weights (e.g. from Gemini's analysis of a
     // free-text answer). When non-empty this takes precedence over
     // mood_slug; {mood_slug, 1.0} and a plain mood_slug score identically.

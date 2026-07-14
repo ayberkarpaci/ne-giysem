@@ -80,11 +80,13 @@ void ensureMoodExists(sqlite3* db, const std::string& mood_slug) {
 }
 
 // The mood blend used for scoring: the explicit weights when given, the
-// single mood otherwise. Every slug is validated against the moods table.
+// single mood otherwise, and no blend at all when neither is set (the user
+// skipped the mood question). Every slug is validated against the moods
+// table.
 std::vector<std::pair<std::string, double>> resolveMoodWeights(
     sqlite3* db, const RecommendationRequest& request) {
     std::vector<std::pair<std::string, double>> weights = request.mood_weights;
-    if (weights.empty()) {
+    if (weights.empty() && !request.mood_slug.empty()) {
         weights.emplace_back(request.mood_slug, 1.0);
     }
     for (const auto& [slug, _] : weights) {
