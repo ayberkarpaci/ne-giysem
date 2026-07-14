@@ -263,6 +263,12 @@ async function loadTypes() {
 async function loadAttributes() {
     const type = $("type-select").value;
     const container = $("attribute-selects");
+    // Rebuilding the selects (e.g. after the user corrects the type) must not
+    // lose what is already picked — keep values for attributes that survive.
+    const previous = {};
+    for (const select of container.querySelectorAll("select")) {
+        if (select.value) previous[select.dataset.attribute] = select.value;
+    }
     container.innerHTML = "";
     if (!type) return;
     const data = await fetchJson(`/api/attributes?type=${type}&lang=${lang}`);
@@ -281,6 +287,10 @@ async function loadAttributes() {
             option.value = v.slug;
             option.textContent = v.name;
             select.appendChild(option);
+        }
+        if (previous[attr.slug] &&
+            attr.values.some((v) => v.slug === previous[attr.slug])) {
+            select.value = previous[attr.slug];
         }
         label.append(caption, select);
         container.appendChild(label);
