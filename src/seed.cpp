@@ -55,7 +55,32 @@ INSERT OR IGNORE INTO clothing_items
     (27, 1, 'wool-coat',     -10,  10, 0, 4),
     -- more accessories
     (28, 5, 'cap',            15,  45, 0, 0),
-    (29, 5, 'gloves',        -20,   5, 0, 4);
+    (29, 5, 'gloves',        -20,   5, 0, 4),
+    -- expanded outerwear (e-commerce style coverage)
+    (30, 1, 'leather-jacket',  8,  18, 0, 3),
+    (31, 1, 'bomber-jacket',   8,  18, 0, 3),
+    (32, 1, 'parka',         -15,   8, 0, 5),
+    (33, 1, 'windbreaker',    10,  20, 0, 2),
+    (34, 1, 'puffer-vest',     5,  15, 0, 3),
+    (35, 1, 'overcoat',       -5,  10, 0, 4),
+    -- expanded tops
+    (36, 2, 'sweatshirt',      8,  18, 0, 3),
+    (37, 2, 'tank-top',       24,  45, 0, 0),
+    (38, 2, 'blouse',         16,  28, 0, 0),
+    (39, 2, 'flannel-shirt',   5,  16, 0, 2),
+    -- expanded bottoms
+    (40, 3, 'dress-pants',     8,  26, 0, 1),
+    (41, 3, 'skirt',          16,  35, 0, 0),
+    (42, 3, 'linen-pants',    20,  40, 0, 0),
+    -- expanded footwear
+    (43, 4, 'heels',          10,  35, 0, 0),
+    (44, 4, 'flats',          12,  32, 0, 0),
+    (45, 4, 'classic-shoes',   0,  30, 0, 1),
+    -- expanded accessories
+    (46, 5, 'belt',          NULL, NULL, 0, 0),
+    (47, 5, 'tie',           NULL, NULL, 0, 0),
+    (48, 5, 'backpack',      NULL, NULL, 0, 0),
+    (49, 5, 'handbag',       NULL, NULL, 0, 0);
 
 INSERT OR IGNORE INTO moods (id, slug) VALUES
     (1, 'energetic'),
@@ -92,8 +117,39 @@ INSERT OR IGNORE INTO item_mood_affinity (item_id, mood_id, weight) VALUES
     (26, 3, 0.9),                           -- blazer: confident
     (27, 3, 0.7), (27, 2, 0.5),             -- wool-coat: confident, cozy
     (28, 1, 0.5), (28, 4, 0.4),             -- cap: energetic, relaxed
-    (29, 2, 0.5);                           -- gloves: cozy
+    (29, 2, 0.5),                           -- gloves: cozy
+    -- expanded outerwear; kept below the raincoat's rainy-day score
+    (30, 3, 0.9), (30, 5, 0.7),             -- leather-jacket: confident, adventurous
+    (31, 1, 0.7), (31, 5, 0.5),             -- bomber-jacket: energetic, adventurous
+    (32, 2, 0.6), (32, 5, 0.6),             -- parka: cozy, adventurous
+    (33, 1, 0.8),                           -- windbreaker: energetic
+    (34, 1, 0.5), (34, 4, 0.4),             -- puffer-vest: energetic, relaxed
+    (35, 3, 0.7), (35, 2, 0.4),             -- overcoat: confident, cozy
+    -- expanded tops; kept below hoodie (cozy 0.9), shirt (confident 0.9)
+    -- and t-shirt (energetic 0.6) so the classic picks stay stable
+    (36, 2, 0.8), (36, 4, 0.6),             -- sweatshirt: cozy, relaxed
+    (37, 1, 0.5), (37, 4, 0.4),             -- tank-top: energetic, relaxed
+    (38, 3, 0.8),                           -- blouse: confident
+    (39, 2, 0.7), (39, 5, 0.4),             -- flannel-shirt: cozy, adventurous
+    -- expanded bottoms
+    (40, 3, 0.9),                           -- dress-pants: confident
+    (41, 3, 0.6), (41, 1, 0.5),             -- skirt: confident, energetic
+    (42, 4, 0.7),                           -- linen-pants: relaxed
+    -- expanded footwear
+    (43, 3, 0.9),                           -- heels: confident
+    (44, 4, 0.6), (44, 3, 0.4),             -- flats: relaxed, confident
+    (45, 3, 0.8),                           -- classic-shoes: confident
+    -- expanded accessories
+    (46, 3, 0.4),                           -- belt: confident
+    (47, 3, 0.7),                           -- tie: confident
+    (48, 5, 0.6), (48, 1, 0.4),             -- backpack: adventurous, energetic
+    (49, 3, 0.5);                           -- handbag: confident
 
+)sql";
+
+// MSVC caps a single string literal at ~16 KB, so the seed continues in a
+// second constant; seedDatabase() executes both.
+constexpr const char* kSeedSqlTranslations = R"sql(
 INSERT OR IGNORE INTO translations (entity_type, entity_id, lang_code, name) VALUES
     ('category', 1, 'en', 'Outerwear'),     ('category', 1, 'tr', 'Dış giyim'),
     ('category', 2, 'en', 'Top'),           ('category', 2, 'tr', 'Üst giyim'),
@@ -130,6 +186,26 @@ INSERT OR IGNORE INTO translations (entity_type, entity_id, lang_code, name) VAL
     ('item', 27, 'en', 'Wool coat'),        ('item', 27, 'tr', 'Yün palto'),
     ('item', 28, 'en', 'Cap'),              ('item', 28, 'tr', 'Şapka'),
     ('item', 29, 'en', 'Gloves'),           ('item', 29, 'tr', 'Eldiven'),
+    ('item', 30, 'en', 'Leather jacket'),   ('item', 30, 'tr', 'Deri ceket'),
+    ('item', 31, 'en', 'Bomber jacket'),    ('item', 31, 'tr', 'Bomber ceket'),
+    ('item', 32, 'en', 'Parka'),            ('item', 32, 'tr', 'Parka'),
+    ('item', 33, 'en', 'Windbreaker'),      ('item', 33, 'tr', 'Rüzgarlık'),
+    ('item', 34, 'en', 'Puffer vest'),      ('item', 34, 'tr', 'Şişme yelek'),
+    ('item', 35, 'en', 'Overcoat'),         ('item', 35, 'tr', 'Kaban'),
+    ('item', 36, 'en', 'Sweatshirt'),       ('item', 36, 'tr', 'Sweatshirt'),
+    ('item', 37, 'en', 'Tank top'),         ('item', 37, 'tr', 'Atlet'),
+    ('item', 38, 'en', 'Blouse'),           ('item', 38, 'tr', 'Bluz'),
+    ('item', 39, 'en', 'Flannel shirt'),    ('item', 39, 'tr', 'Oduncu gömleği'),
+    ('item', 40, 'en', 'Dress pants'),      ('item', 40, 'tr', 'Kumaş pantolon'),
+    ('item', 41, 'en', 'Skirt'),            ('item', 41, 'tr', 'Etek'),
+    ('item', 42, 'en', 'Linen pants'),      ('item', 42, 'tr', 'Keten pantolon'),
+    ('item', 43, 'en', 'Heels'),            ('item', 43, 'tr', 'Topuklu ayakkabı'),
+    ('item', 44, 'en', 'Flats'),            ('item', 44, 'tr', 'Babet'),
+    ('item', 45, 'en', 'Classic shoes'),    ('item', 45, 'tr', 'Klasik ayakkabı'),
+    ('item', 46, 'en', 'Belt'),             ('item', 46, 'tr', 'Kemer'),
+    ('item', 47, 'en', 'Tie'),              ('item', 47, 'tr', 'Kravat'),
+    ('item', 48, 'en', 'Backpack'),         ('item', 48, 'tr', 'Sırt çantası'),
+    ('item', 49, 'en', 'Handbag'),          ('item', 49, 'tr', 'El çantası'),
 
     ('mood', 1, 'en', 'Energetic'),         ('mood', 1, 'tr', 'Enerjik'),
     ('mood', 2, 'en', 'Cozy'),              ('mood', 2, 'tr', 'Keyifli'),
@@ -224,6 +300,7 @@ INSERT OR IGNORE INTO translations (entity_type, entity_id, lang_code, name) VAL
 
 void seedDatabase(Database& db) {
     db.execute(kSeedSql);
+    db.execute(kSeedSqlTranslations);
 }
 
 }  // namespace negiysem
