@@ -38,6 +38,41 @@
             </label>
         </section>
 
+        <section class="card" id="weather-section">
+            <h2 data-i18n="weather_title">Weather &amp; location</h2>
+            <div class="weather-row">
+                <span><span data-i18n="location_label">Location</span>: <strong id="location-name">…</strong></span>
+                <button id="location-edit-btn" class="link-btn" data-i18n="change">change</button>
+            </div>
+            <div id="location-editor" class="hidden">
+                <input type="text" id="city-input" maxlength="60" autocomplete="off">
+                <div id="city-results" class="chips"></div>
+                <button id="location-auto-btn" class="link-btn" data-i18n="auto_locate">Use my IP location</button>
+            </div>
+            <label class="hours-row">
+                <span data-i18n="hours_label">When will you be out?</span>
+                <span class="hours-selects">
+                    <select id="hour-start"></select>
+                    <span>–</span>
+                    <select id="hour-end"></select>
+                </span>
+            </label>
+            <label class="toggle">
+                <input type="checkbox" id="manual-weather">
+                <span data-i18n="manual_weather">I'll enter the weather myself</span>
+            </label>
+            <div id="manual-weather-fields" class="hidden">
+                <label>
+                    <span data-i18n="temp_label">Temperature (°C)</span>
+                    <input type="number" id="manual-temp" min="-30" max="50" step="0.5" value="20">
+                </label>
+                <label class="toggle">
+                    <input type="checkbox" id="manual-rain">
+                    <span data-i18n="rain_label">Rainy</span>
+                </label>
+            </div>
+        </section>
+
         <button id="recommend-btn" data-i18n="recommend">What should I wear?</button>
 
         <section class="card hidden" id="result">

@@ -310,6 +310,92 @@ main {
     cursor: wait;
 }
 
+.weather-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.95rem;
+    margin-bottom: 0.5rem;
+}
+
+.link-btn {
+    border: none;
+    background: transparent;
+    color: var(--accent);
+    cursor: pointer;
+    font-size: 0.9rem;
+    padding: 0.2rem 0;
+    text-decoration: underline;
+}
+
+#location-editor input {
+    width: 100%;
+    padding: 0.5rem;
+    border: 1px solid #d5d9e4;
+    border-radius: 0.5rem;
+    font: inherit;
+    margin-bottom: 0.5rem;
+    background: #fff;
+    color: var(--text);
+}
+
+#city-results {
+    margin-bottom: 0.5rem;
+}
+
+.hours-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.95rem;
+    margin-top: 0.75rem;
+}
+
+.hours-selects {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+}
+
+.hours-selects select,
+#manual-weather-fields input[type="number"] {
+    padding: 0.4rem;
+    border: 1px solid #d5d9e4;
+    border-radius: 0.5rem;
+    font-size: 0.95rem;
+    background: #fff;
+    color: var(--text);
+}
+
+#manual-weather-fields {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-top: 0.6rem;
+    font-size: 0.9rem;
+    color: var(--muted);
+}
+
+#manual-weather-fields.hidden {
+    display: none;
+}
+
+#manual-weather-fields label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+#manual-weather-fields .toggle {
+    margin-top: 0;
+}
+
+/* The multi-select color chips need the full row in the attribute grid. */
+#attribute-selects label:has(.attr-chips) {
+    grid-column: 1 / -1;
+}
+
 .hidden {
     display: none;
 }

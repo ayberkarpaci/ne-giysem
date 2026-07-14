@@ -4,12 +4,15 @@
 #include <sqlite3.h>
 #include <nlohmann/json.hpp>
 
+#include <algorithm>
 #include <exception>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <map>
+#include <optional>
 #include <stdexcept>
+#include <utility>
 
 #include "database.h"
 #include "env.h"
@@ -39,12 +42,117 @@ json itemToJson(const RecommendedItem& item) {
     return entry;
 }
 
+json weatherToJson(const WeatherReport& weather) {
+    json body = {
+        {"temperature_c", weather.temperature_c},
+        {"is_raining", weather.is_raining},
+        {"city", weather.city},
+        {"basis", weather.basis},
+    };
+    if (weather.basis == "window") {
+        body["start_hour"] = weather.start_hour;
+        body["end_hour"] = weather.end_hour;
+    }
+    return body;
+}
+
+// Optional user overrides shared by every recommendation endpoint: a manual
+// weather entry, a corrected location and/or the hour window they are out.
+struct WeatherOverrides {
+    std::optional<double> temperature_c;
+    bool is_raining = false;
+    std::optional<double> latitude;
+    std::optional<double> longitude;
+    std::string city;
+    std::optional<int> start_hour;
+    std::optional<int> end_hour;
+};
+
+WeatherOverrides overridesFromParams(const httplib::Request& req) {
+    WeatherOverrides o;
+    if (req.has_param("temp")) {
+        o.temperature_c = std::stod(req.get_param_value("temp"));
+        o.is_raining = req.get_param_value("rain") == "1";
+    }
+    if (req.has_param("lat") && req.has_param("lon")) {
+        o.latitude = std::stod(req.get_param_value("lat"));
+        o.longitude = std::stod(req.get_param_value("lon"));
+    }
+    if (req.has_param("city")) o.city = req.get_param_value("city");
+    if (req.has_param("start_hour") && req.has_param("end_hour")) {
+        o.start_hour = std::stoi(req.get_param_value("start_hour"));
+        o.end_hour = std::stoi(req.get_param_value("end_hour"));
+    }
+    return o;
+}
+
+WeatherOverrides overridesFromJson(const json& body) {
+    WeatherOverrides o;
+    if (body.contains("temp") && body["temp"].is_number()) {
+        o.temperature_c = body["temp"].get<double>();
+        o.is_raining = body.value("rain", false);
+    }
+    if (body.contains("lat") && body["lat"].is_number() &&
+        body.contains("lon") && body["lon"].is_number()) {
+        o.latitude = body["lat"].get<double>();
+        o.longitude = body["lon"].get<double>();
+    }
+    o.city = body.value("city", "");
+    if (body.contains("start_hour") && body["start_hour"].is_number_integer() &&
+        body.contains("end_hour") && body["end_hour"].is_number_integer()) {
+        o.start_hour = body["start_hour"].get<int>();
+        o.end_hour = body["end_hour"].get<int>();
+    }
+    return o;
+}
+
+// Decides the weather for a recommendation: manual entry wins, then the
+// user's corrected location, then IP geolocation; with an hour window the
+// hourly forecast is averaged, otherwise current/daily conditions are used.
+WeatherReport resolveWeather(const WeatherOverrides& overrides, int day_offset) {
+    WeatherReport report;
+    report.city = overrides.city;
+    if (overrides.temperature_c) {
+        report.temperature_c = *overrides.temperature_c;
+        report.is_raining = overrides.is_raining;
+        report.basis = "manual";
+        return report;
+    }
+
+    WeatherService service;
+    Location location;
+    if (overrides.latitude && overrides.longitude) {
+        location.latitude = *overrides.latitude;
+        location.longitude = *overrides.longitude;
+        location.city = overrides.city;
+    } else {
+        location = service.detectLocation();
+        report.city = location.city;
+    }
+
+    Weather weather;
+    if (overrides.start_hour && overrides.end_hour) {
+        weather = service.fetchWindow(location, day_offset, *overrides.start_hour,
+                                      *overrides.end_hour);
+        report.basis = "window";
+        report.start_hour = std::clamp(*overrides.start_hour, 0, 23);
+        report.end_hour = std::clamp(*overrides.end_hour, 0, 23);
+        if (report.end_hour < report.start_hour) {
+            std::swap(report.start_hour, report.end_hour);
+        }
+    } else {
+        weather = service.fetchForecast(location, day_offset);
+        report.basis = day_offset > 0 ? "daily" : "current";
+    }
+    report.temperature_c = weather.temperature_c;
+    report.is_raining = weather.is_raining;
+    return report;
+}
+
 }  // namespace
 
 std::string outfitToJson(const std::vector<RecommendedItem>& outfit,
-                         double temperature_c,
-                         bool is_raining,
-                         const std::string& city,
+                         const WeatherReport& weather,
                          const std::string& mood_slug,
                          const std::string& source) {
     json items = json::array();
@@ -52,7 +160,7 @@ std::string outfitToJson(const std::vector<RecommendedItem>& outfit,
         items.push_back(itemToJson(item));
     }
     const json body = {
-        {"weather", {{"temperature_c", temperature_c}, {"is_raining", is_raining}, {"city", city}}},
+        {"weather", weatherToJson(weather)},
         {"mood", mood_slug},
         {"source", source},
         {"outfit", items},
@@ -166,6 +274,42 @@ bool Server::run(int port) {
         std::cerr << "Warning: web root '" << web_root_ << "' not found; API only." << std::endl;
     }
 
+    server.Get("/api/location", [](const httplib::Request&, httplib::Response& res) {
+        try {
+            const Location location = WeatherService().detectLocation();
+            res.set_content(json{{"city", location.city},
+                                 {"latitude", location.latitude},
+                                 {"longitude", location.longitude}}
+                                .dump(),
+                            "application/json");
+        } catch (const std::exception& e) {
+            res.status = 500;
+            res.set_content(json{{"error", e.what()}}.dump(), "application/json");
+        }
+    });
+
+    server.Get("/api/geocode", [](const httplib::Request& req, httplib::Response& res) {
+        try {
+            const std::string name = req.get_param_value("name");
+            if (name.size() < 2) {
+                res.set_content(json{{"results", json::array()}}.dump(), "application/json");
+                return;
+            }
+            const std::string lang =
+                req.has_param("lang") ? req.get_param_value("lang") : "en";
+            json results = json::array();
+            for (const auto& loc : WeatherService().searchCity(name, lang)) {
+                results.push_back({{"city", loc.city},
+                                   {"latitude", loc.latitude},
+                                   {"longitude", loc.longitude}});
+            }
+            res.set_content(json{{"results", results}}.dump(), "application/json");
+        } catch (const std::exception& e) {
+            res.status = 500;
+            res.set_content(json{{"error", e.what()}}.dump(), "application/json");
+        }
+    });
+
     server.Get("/api/moods", [this](const httplib::Request& req, httplib::Response& res) {
         try {
             res.set_content(moodsToJson(db_, req.get_param_value("lang")), "application/json");
@@ -181,18 +325,9 @@ bool Server::run(int port) {
             request.mood_slug = req.has_param("mood") ? req.get_param_value("mood") : "cozy";
             request.lang = req.has_param("lang") ? req.get_param_value("lang") : "en";
 
-            std::string city;
-            if (req.has_param("temp")) {
-                request.temperature_c = std::stod(req.get_param_value("temp"));
-                request.is_raining = req.get_param_value("rain") == "1";
-            } else {
-                WeatherService weather_service;
-                const auto location = weather_service.detectLocation();
-                const auto weather = weather_service.fetchCurrent(location);
-                request.temperature_c = weather.temperature_c;
-                request.is_raining = weather.is_raining;
-                city = location.city;
-            }
+            const WeatherReport weather = resolveWeather(overridesFromParams(req), 0);
+            request.temperature_c = weather.temperature_c;
+            request.is_raining = weather.is_raining;
 
             // Fall back to the catalog when the wardrobe is empty, and say so
             // in the response so the UI can explain.
@@ -206,8 +341,7 @@ bool Server::run(int port) {
                                     : recommender.recommend(request);
             if (source != "wardrobe") source = "catalog";
 
-            res.set_content(outfitToJson(outfit, request.temperature_c, request.is_raining, city,
-                                         request.mood_slug, source),
+            res.set_content(outfitToJson(outfit, weather, request.mood_slug, source),
                             "application/json");
         } catch (const std::exception& e) {
             res.status = 500;
@@ -346,9 +480,8 @@ bool Server::run(int port) {
 
             const ParsedRequest parsed = gemini.parseUserRequest(text);
 
-            WeatherService weather_service;
-            const auto location = weather_service.detectLocation();
-            const auto weather = weather_service.fetchForecast(location, parsed.day_offset);
+            const WeatherReport weather =
+                resolveWeather(overridesFromJson(body), parsed.day_offset);
 
             RecommendationRequest request;
             request.temperature_c = weather.temperature_c;
@@ -369,7 +502,10 @@ bool Server::run(int port) {
             // still goes out.
             std::string explanation;
             try {
-                explanation = gemini.explainOutfit(text, outfit, weather, lang);
+                Weather conditions;
+                conditions.temperature_c = weather.temperature_c;
+                conditions.is_raining = weather.is_raining;
+                explanation = gemini.explainOutfit(text, outfit, conditions, lang);
             } catch (const std::exception& e) {
                 std::cerr << "explanation failed: " << e.what() << std::endl;
             }
@@ -380,10 +516,7 @@ bool Server::run(int port) {
             }
             res.set_content(
                 json{
-                    {"weather",
-                     {{"temperature_c", weather.temperature_c},
-                      {"is_raining", weather.is_raining},
-                      {"city", location.city}}},
+                    {"weather", weatherToJson(weather)},
                     {"parsed",
                      {{"day_offset", parsed.day_offset},
                       {"mood", request.mood_slug},
@@ -464,9 +597,7 @@ bool Server::run(int port) {
                 weights = {{"relaxed", 1.0}};  // the text said nothing about mood
             }
 
-            WeatherService weather_service;
-            const auto location = weather_service.detectLocation();
-            const auto weather = weather_service.fetchCurrent(location);
+            const WeatherReport weather = resolveWeather(overridesFromJson(body), 0);
 
             RecommendationRequest request;
             request.temperature_c = weather.temperature_c;
@@ -499,10 +630,7 @@ bool Server::run(int port) {
             }
             res.set_content(
                 json{
-                    {"weather",
-                     {{"temperature_c", weather.temperature_c},
-                      {"is_raining", weather.is_raining},
-                      {"city", location.city}}},
+                    {"weather", weatherToJson(weather)},
                     {"moods", moods},
                     {"source", source},
                     {"outfit", items},

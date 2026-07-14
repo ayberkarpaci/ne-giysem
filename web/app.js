@@ -8,11 +8,31 @@ const STRINGS = {
             moods.map((m) => `${m.name} ${Math.round(m.weight * 100)}%`).join(" · "),
         recommend: "What should I wear?",
         loading: "Checking the weather...",
-        weather: (t, rainy, city) =>
-            `${t} °C, ${rainy ? "rainy" : "dry"}${city ? " in " + city : ""}`,
+        weather: (w) => {
+            const t = Math.round(w.temperature_c * 10) / 10;
+            const rainy = w.is_raining ? "rainy" : "dry";
+            const city = w.city ? `${w.city}: ` : "";
+            if (w.basis === "manual") return `Weather you entered: ${t} °C, ${rainy}`;
+            if (w.basis === "window")
+                return `${city}${hh(w.start_hour)}–${hh(w.end_hour)} average ` +
+                       `${t} °C, ${rainy} (forecast)`;
+            if (w.basis === "daily") return `${city}${t} °C, ${rainy} (day average)`;
+            return `${city}${t} °C, ${rainy} (right now)`;
+        },
         error: "Could not get a recommendation. Is the network up?",
         save_error: "Could not save the item.",
-        footer: "Weather by open-meteo.com · location by ip-api.com",
+        footer: "Weather & city search by open-meteo.com · location by ip-api.com",
+        weather_title: "Weather & location",
+        location_label: "Location",
+        change: "change",
+        auto_locate: "Use my IP location",
+        city_placeholder: "Type a city, e.g. Aydın",
+        hours_label: "When will you be out?",
+        manual_weather: "I'll enter the weather myself",
+        temp_label: "Temperature (°C)",
+        rain_label: "Rainy",
+        locating: "Locating...",
+        location_unknown: "could not detect",
         use_wardrobe: "Recommend from my wardrobe",
         catalog_fallback: "Your wardrobe is empty, so this comes from the general catalog.",
         ask_title: "Tell me your plan",
@@ -43,11 +63,31 @@ const STRINGS = {
             moods.map((m) => `%${Math.round(m.weight * 100)} ${m.name}`).join(" · "),
         recommend: "Ne giysem?",
         loading: "Hava durumuna bakılıyor...",
-        weather: (t, rainy, city) =>
-            `${t} °C, ${rainy ? "yağmurlu" : "kuru"}${city ? ", " + city : ""}`,
+        weather: (w) => {
+            const t = Math.round(w.temperature_c * 10) / 10;
+            const rainy = w.is_raining ? "yağmurlu" : "kuru";
+            const city = w.city ? `${w.city}: ` : "";
+            if (w.basis === "manual") return `Senin girdiğin hava: ${t} °C, ${rainy}`;
+            if (w.basis === "window")
+                return `${city}${hh(w.start_hour)}–${hh(w.end_hour)} arası ort. ` +
+                       `${t} °C, ${rainy} (tahmin)`;
+            if (w.basis === "daily") return `${city}${t} °C, ${rainy} (gün ortalaması)`;
+            return `${city}${t} °C, ${rainy} (şu an)`;
+        },
         error: "Öneri alınamadı. Ağ bağlantısını kontrol et.",
         save_error: "Kıyafet kaydedilemedi.",
-        footer: "Hava durumu: open-meteo.com · konum: ip-api.com",
+        footer: "Hava durumu ve şehir arama: open-meteo.com · konum: ip-api.com",
+        weather_title: "Hava & konum",
+        location_label: "Konum",
+        change: "değiştir",
+        auto_locate: "IP konumumu kullan",
+        city_placeholder: "Şehir yaz, örn. Aydın",
+        hours_label: "Ne zaman dışarıda olacaksın?",
+        manual_weather: "Hava durumunu kendim gireceğim",
+        temp_label: "Sıcaklık (°C)",
+        rain_label: "Yağışlı",
+        locating: "Konum bulunuyor...",
+        location_unknown: "bulunamadı",
         use_wardrobe: "Gardırobumdan öner",
         catalog_fallback: "Gardırobun boş olduğu için bu öneri genel katalogdan geldi.",
         ask_title: "Planını anlat",
@@ -83,9 +123,13 @@ const CATEGORY_EMOJI = {
 let lang = localStorage.getItem("lang") || "en";
 let mood = "cozy";
 let wardrobeCount = 0;
+// User-corrected location {city, latitude, longitude}; null = detect by IP.
+let savedLocation = JSON.parse(localStorage.getItem("location") || "null");
+let detectedCity = "";
 
 const $ = (id) => document.getElementById(id);
 const t = (key) => STRINGS[lang][key];
+const hh = (h) => String(h).padStart(2, "0") + ":00";
 
 function showError(message) {
     $("error").textContent = message;
@@ -103,6 +147,112 @@ function applyStaticStrings() {
     });
     $("ask-input").placeholder = t("ask_placeholder");
     $("feel-input").placeholder = t("feel_placeholder");
+    $("city-input").placeholder = t("city_placeholder");
+    renderLocationName();
+}
+
+function renderLocationName() {
+    $("location-name").textContent =
+        savedLocation ? savedLocation.city
+                      : detectedCity || t("location_unknown");
+}
+
+async function loadLocation() {
+    if (savedLocation) {
+        renderLocationName();
+        return;
+    }
+    $("location-name").textContent = t("locating");
+    try {
+        const data = await fetchJson("/api/location");
+        detectedCity = data.city;
+    } catch (err) {
+        console.error(err);
+        detectedCity = "";
+    }
+    renderLocationName();
+}
+
+let citySearchTimer = null;
+async function searchCity() {
+    const name = $("city-input").value.trim();
+    const results = $("city-results");
+    if (name.length < 2) {
+        results.innerHTML = "";
+        return;
+    }
+    try {
+        const data = await fetchJson(
+            `/api/geocode?name=${encodeURIComponent(name)}&lang=${lang}`);
+        results.innerHTML = "";
+        for (const candidate of data.results) {
+            const btn = document.createElement("button");
+            btn.type = "button";
+            btn.textContent = candidate.city;
+            btn.addEventListener("click", () => {
+                savedLocation = candidate;
+                localStorage.setItem("location", JSON.stringify(candidate));
+                $("location-editor").classList.add("hidden");
+                $("city-input").value = "";
+                results.innerHTML = "";
+                renderLocationName();
+            });
+            results.appendChild(btn);
+        }
+    } catch (err) {
+        console.error(err);
+    }
+}
+
+function initHourSelects() {
+    const saved = JSON.parse(localStorage.getItem("hours") || '{"start":9,"end":18}');
+    for (const [id, value] of [["hour-start", saved.start], ["hour-end", saved.end]]) {
+        const select = $(id);
+        for (let h = 0; h < 24; ++h) {
+            const option = document.createElement("option");
+            option.value = h;
+            option.textContent = hh(h);
+            select.appendChild(option);
+        }
+        select.value = value;
+        select.addEventListener("change", () => {
+            localStorage.setItem("hours", JSON.stringify({
+                start: Number($("hour-start").value),
+                end: Number($("hour-end").value),
+            }));
+        });
+    }
+}
+
+// The weather/location choices every recommendation request carries.
+function weatherOptions() {
+    const options = {
+        start_hour: Number($("hour-start").value),
+        end_hour: Number($("hour-end").value),
+    };
+    if (savedLocation) {
+        options.lat = savedLocation.latitude;
+        options.lon = savedLocation.longitude;
+        options.city = savedLocation.city;
+    }
+    if ($("manual-weather").checked) {
+        const temp = parseFloat($("manual-temp").value);
+        if (!Number.isNaN(temp)) {
+            options.temp = temp;
+            options.rain = $("manual-rain").checked;
+        }
+    }
+    return options;
+}
+
+function weatherQueryString() {
+    const o = weatherOptions();
+    let query = `&start_hour=${o.start_hour}&end_hour=${o.end_hour}`;
+    if (o.lat !== undefined) {
+        query += `&lat=${o.lat}&lon=${o.lon}&city=${encodeURIComponent(o.city)}`;
+    }
+    if (o.temp !== undefined) query += `&temp=${o.temp}&rain=${o.rain ? 1 : 0}`;
+    return query;
 }
 
 function renderOutfitList(listEl, items) {
@@ -172,7 +322,8 @@ async function recommend() {
             const res = await fetch("/api/feel", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ text: feeling, lang, source }),
+                body: JSON.stringify(
+                    { text: feeling, lang, source, ...weatherOptions() }),
             });
             data = await res.json();
             if (!res.ok) {
@@ -183,15 +334,12 @@ async function recommend() {
         }
         else {
             data = await fetchJson(
-                `/api/recommendation?mood=${mood}&lang=${lang}&source=${source}`);
+                `/api/recommendation?mood=${mood}&lang=${lang}&source=${source}` +
+                weatherQueryString());
         }
         $("mood-line").classList.toggle("hidden", !feeling);
 
-        $("weather-line").textContent = t("weather")(
-            Math.round(data.weather.temperature_c * 10) / 10,
-            data.weather.is_raining,
-            data.weather.city,
-        );
+        $("weather-line").textContent = t("weather")(data.weather);
         $("source-note").classList.toggle("hidden",
             !(useWardrobe && data.source === "catalog"));
 
@@ -217,18 +365,14 @@ async function ask() {
         const res = await fetch("/api/ask", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ text, lang }),
+            body: JSON.stringify({ text, lang, ...weatherOptions() }),
         });
         const data = await res.json();
         if (!res.ok) {
             showError(data.code === "no_api_key" ? t("ask_no_key") : t("error"));
             return;
         }
-        $("ask-weather-line").textContent = t("weather")(
-            Math.round(data.weather.temperature_c * 10) / 10,
-            data.weather.is_raining,
-            data.weather.city,
-        );
+        $("ask-weather-line").textContent = t("weather")(data.weather);
         renderOutfitList($("ask-outfit-list"), data.outfit);
         $("ask-explanation").textContent = data.explanation || "";
         $("ask-result").classList.remove("hidden");
@@ -491,7 +635,30 @@ $("type-select").addEventListener("change", loadAttributes);
 $("photo-input").addEventListener("change", classifyPhoto);
 $("save-btn").addEventListener("click", saveItem);
 
+$("location-edit-btn").addEventListener("click", () => {
+    $("location-editor").classList.toggle("hidden");
+    $("city-input").focus();
+});
+$("city-input").addEventListener("input", () => {
+    clearTimeout(citySearchTimer);
+    citySearchTimer = setTimeout(searchCity, 400);
+});
+$("location-auto-btn").addEventListener("click", async () => {
+    savedLocation = null;
+    localStorage.removeItem("location");
+    $("location-editor").classList.add("hidden");
+    $("city-input").value = "";
+    $("city-results").innerHTML = "";
+    await loadLocation();
+});
+$("manual-weather").addEventListener("change", () => {
+    $("manual-weather-fields").classList.toggle(
+        "hidden", !$("manual-weather").checked);
+});
+
+initHourSelects();
 refreshAll().catch((err) => {
     console.error(err);
     showError(STRINGS[lang].error);
 });
+loadLocation();

@@ -8,28 +8,41 @@ namespace negiysem {
 class Database;
 struct RecommendedItem;
 
+// The weather a recommendation was based on, including how it was decided,
+// so the UI can tell the user (e.g. "average between 09-18h in Aydın").
+struct WeatherReport {
+    double temperature_c = 0.0;
+    bool is_raining = false;
+    std::string city;
+    std::string basis = "current";  // current | daily | window | manual
+    int start_hour = -1;            // set only when basis == "window"
+    int end_hour = -1;
+};
+
 // JSON builders, exposed for unit testing. Both return serialized JSON.
 std::string outfitToJson(const std::vector<RecommendedItem>& outfit,
-                         double temperature_c,
-                         bool is_raining,
-                         const std::string& city,
+                         const WeatherReport& weather,
                          const std::string& mood_slug,
                          const std::string& source = "catalog");
 std::string moodsToJson(Database& db, const std::string& lang);
 
 // HTTP server: serves the static web UI plus a small JSON API.
-//   POST   /api/ask                          JSON {text, lang} -> Gemini-parsed
-//                                            request, outfit and explanation
+//   POST   /api/ask                          JSON {text, lang, <weather overrides>}
+//                                            -> Gemini-parsed request, outfit, explanation
 //   GET    /api/moods?lang=..
-//   GET    /api/recommendation?mood=..&lang=..[&temp=..&rain=0|1][&source=wardrobe]
+//   GET    /api/recommendation?mood=..&lang=..[&source=wardrobe][<weather overrides>]
+//   GET    /api/location                     IP-based city + coordinates
+//   GET    /api/geocode?name=..&lang=..      city search for manual correction
 //   GET    /api/types?lang=..
 //   GET    /api/attributes?type=..&lang=..
 //   GET    /api/wardrobe?lang=..
 //   POST   /api/wardrobe                     JSON {type, label, values: [..]}
 //   PUT    /api/wardrobe/<id>/photo          raw image body (jpeg/png/webp)
 //   DELETE /api/wardrobe/<id>
-// Weather is fetched automatically unless temp is given. Photos are stored
-// under data/photos/ and served at /photos/.
+// Weather overrides (query params on GET, JSON fields on POST): manual
+// weather (temp + rain), a corrected location (lat + lon + city) and/or an
+// hour window (start_hour + end_hour) that averages the hourly forecast.
+// Photos are stored under data/photos/ and served at /photos/.
 class Server {
 public:
     Server(Database& db, std::string web_root) : db_(db), web_root_(std::move(web_root)) {}

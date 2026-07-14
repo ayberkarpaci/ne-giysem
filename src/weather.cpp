@@ -3,8 +3,10 @@
 #include <cpr/cpr.h>
 #include <nlohmann/json.hpp>
 
+#include <algorithm>
 #include <sstream>
 #include <stdexcept>
+#include <utility>
 
 namespace negiysem {
 
@@ -68,6 +70,72 @@ Weather parseOpenMeteoDailyResponse(const std::string& json_text, int day_offset
     return weather;
 }
 
+Weather parseOpenMeteoHourlyResponse(const std::string& json_text, int day_offset,
+                                     int start_hour, int end_hour) {
+    const json j = json::parse(json_text, nullptr, /*allow_exceptions=*/false);
+    if (j.is_discarded() || !j.contains("hourly")) {
+        throw std::runtime_error("unexpected open-meteo hourly response: " + json_text);
+    }
+    const json& hourly = j.at("hourly");
+    const auto& temps = hourly.at("temperature_2m");
+
+    start_hour = std::clamp(start_hour, 0, 23);
+    end_hour = std::clamp(end_hour, 0, 23);
+    if (end_hour < start_hour) std::swap(start_hour, end_hour);
+
+    double sum = 0.0;
+    int count = 0;
+    bool wet = false;
+    for (int hour = start_hour; hour <= end_hour; ++hour) {
+        const size_t index = static_cast<size_t>(day_offset) * 24 + hour;
+        if (index >= temps.size() || temps.at(index).is_null()) continue;
+        sum += temps.at(index).get<double>();
+        ++count;
+        const auto& precipitation = hourly.value("precipitation", json::array());
+        if (precipitation.size() > index && !precipitation.at(index).is_null() &&
+            precipitation.at(index).get<double>() > 0.05) {
+            wet = true;
+        }
+        const auto& codes = hourly.value("weather_code", json::array());
+        if (codes.size() > index && !codes.at(index).is_null() &&
+            isWetWeatherCode(codes.at(index).get<int>())) {
+            wet = true;
+        }
+    }
+    if (count == 0) {
+        throw std::runtime_error("no forecast hours in the requested window");
+    }
+    Weather weather;
+    weather.temperature_c = sum / count;
+    weather.is_raining = wet;
+    return weather;
+}
+
+std::vector<Location> parseGeocodingResponse(const std::string& json_text) {
+    const json j = json::parse(json_text, nullptr, /*allow_exceptions=*/false);
+    if (j.is_discarded() || !j.is_object()) {
+        throw std::runtime_error("unexpected geocoding response: " + json_text);
+    }
+    std::vector<Location> candidates;
+    if (!j.contains("results") || !j["results"].is_array()) {
+        return candidates;  // no match is a valid answer
+    }
+    for (const auto& result : j["results"]) {
+        if (!result.contains("latitude") || !result.contains("longitude")) continue;
+        Location loc;
+        loc.latitude = result["latitude"].get<double>();
+        loc.longitude = result["longitude"].get<double>();
+        std::string label = result.value("name", "");
+        const std::string admin1 = result.value("admin1", "");
+        const std::string country = result.value("country", "");
+        if (!admin1.empty() && admin1 != label) label += ", " + admin1;
+        if (!country.empty()) label += ", " + country;
+        loc.city = label;
+        candidates.push_back(std::move(loc));
+    }
+    return candidates;
+}
+
 Location WeatherService::detectLocation() const {
     // The free ip-api.com tier is HTTP-only.
     cpr::Response r = cpr::Get(cpr::Url{"http://ip-api.com/json"}, cpr::Timeout{5000});
@@ -106,6 +174,37 @@ Weather WeatherService::fetchForecast(const Location& location, int day_offset) 
                                  std::to_string(r.status_code) + "): " + r.error.message);
     }
     return parseOpenMeteoDailyResponse(r.text, day_offset);
+}
+
+Weather WeatherService::fetchWindow(const Location& location, int day_offset,
+                                    int start_hour, int end_hour) const {
+    day_offset = std::clamp(day_offset, 0, 6);
+    std::ostringstream url;
+    url << "https://api.open-meteo.com/v1/forecast?latitude=" << location.latitude
+        << "&longitude=" << location.longitude
+        << "&hourly=temperature_2m,precipitation,weather_code"
+        << "&forecast_days=" << (day_offset + 1) << "&timezone=auto";
+    cpr::Response r = cpr::Get(cpr::Url{url.str()}, cpr::Timeout{5000});
+    if (r.status_code != 200) {
+        throw std::runtime_error("hourly forecast request failed (HTTP " +
+                                 std::to_string(r.status_code) + "): " + r.error.message);
+    }
+    return parseOpenMeteoHourlyResponse(r.text, day_offset, start_hour, end_hour);
+}
+
+std::vector<Location> WeatherService::searchCity(const std::string& name,
+                                                 const std::string& lang) const {
+    // cpr::Parameters URL-encodes the query, so Turkish characters are safe.
+    cpr::Response r = cpr::Get(
+        cpr::Url{"https://geocoding-api.open-meteo.com/v1/search"},
+        cpr::Parameters{{"name", name}, {"count", "5"}, {"language", lang},
+                        {"format", "json"}},
+        cpr::Timeout{5000});
+    if (r.status_code != 200) {
+        throw std::runtime_error("geocoding request failed (HTTP " +
+                                 std::to_string(r.status_code) + "): " + r.error.message);
+    }
+    return parseGeocodingResponse(r.text);
 }
 
 }  // namespace negiysem
