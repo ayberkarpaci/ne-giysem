@@ -519,6 +519,17 @@ select:focus {
     color: var(--danger);
 }
 
+.bulk-progress .retry-btn {
+    flex-shrink: 0;
+    font-size: 0.85rem;
+}
+
+.bulk-progress .bulk-summary {
+    justify-content: center;
+    font-weight: 600;
+    background: var(--accent-soft);
+}
+
 .group-title {
     font-size: 0.95rem;
     font-weight: 700;

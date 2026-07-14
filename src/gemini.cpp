@@ -4,9 +4,11 @@
 #include <nlohmann/json.hpp>
 
 #include <algorithm>
+#include <chrono>
 #include <ctime>
 #include <sstream>
 #include <stdexcept>
+#include <thread>
 
 namespace negiysem {
 
@@ -324,6 +326,9 @@ ClassifiedGarment parseClassifiedGarmentJson(const std::string& text,
 namespace {
 
 // Shared POST to generateContent; `parts` may mix text and inline image data.
+// Free-tier requests hit per-minute rate limits during bulk work (HTTP 429),
+// so short limits are waited out with a few increasingly patient retries
+// instead of failing the whole call.
 std::string postGenerate(const std::string& api_key, const std::string& model,
                          const json& parts, bool json_response) {
     json body = {
@@ -332,13 +337,23 @@ std::string postGenerate(const std::string& api_key, const std::string& model,
     if (json_response) {
         body["generationConfig"] = {{"responseMimeType", "application/json"}};
     }
-    cpr::Response r = cpr::Post(
-        cpr::Url{"https://generativelanguage.googleapis.com/v1beta/models/" + model +
-                 ":generateContent"},
-        cpr::Header{{"Content-Type", "application/json"}, {"x-goog-api-key", api_key}},
-        cpr::Body{body.dump()}, cpr::Timeout{60000});
-    if (r.status_code == 0) {
-        throw std::runtime_error("gemini request failed: " + r.error.message);
+
+    cpr::Response r;
+    for (int attempt = 0;; ++attempt) {
+        r = cpr::Post(
+            cpr::Url{"https://generativelanguage.googleapis.com/v1beta/models/" + model +
+                     ":generateContent"},
+            cpr::Header{{"Content-Type", "application/json"}, {"x-goog-api-key", api_key}},
+            cpr::Body{body.dump()}, cpr::Timeout{60000});
+        if (r.status_code == 0) {
+            throw std::runtime_error("gemini request failed: " + r.error.message);
+        }
+        const bool retryable = r.status_code == 429 || r.status_code == 503;
+        if (!retryable || attempt >= 3) break;
+        std::this_thread::sleep_for(std::chrono::seconds(10LL << attempt));  // 10s, 20s, 40s
+    }
+    if (r.status_code == 429) {
+        throw std::runtime_error("gemini rate limit exceeded (HTTP 429): " + r.text);
     }
     return extractGeminiText(r.text);
 }

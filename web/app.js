@@ -71,6 +71,9 @@ const STRINGS = {
         bulk_reading: "recognizing...",
         bulk_saved: "added",
         bulk_failed: "not recognized — add it manually below",
+        bulk_rate_limited: "API limit reached — press Retry in a moment",
+        bulk_retry: "Retry",
+        bulk_summary: (ok, total) => `${ok}/${total} added to your wardrobe.`,
     },
     tr: {
         mood_title: "Bugün nasıl hissediyorsun?",
@@ -144,6 +147,9 @@ const STRINGS = {
         bulk_reading: "tanınıyor...",
         bulk_saved: "eklendi",
         bulk_failed: "tanınamadı — aşağıdan elle ekleyebilirsin",
+        bulk_rate_limited: "API sınırına takıldı — az sonra Tekrar dene",
+        bulk_retry: "Tekrar dene",
+        bulk_summary: (ok, total) => `${ok}/${total} gardırobuna eklendi.`,
     },
 };
 
@@ -722,6 +728,73 @@ function wardrobeCard(item) {
     return li;
 }
 
+// Classifies and saves one photo; updates its progress row. Returns true
+// when the item landed in the wardrobe.
+async function processBulkFile(original, li, status) {
+    li.classList.remove("done", "failed");
+    status.textContent = t("bulk_reading");
+    try {
+        const file = await shrinkPhoto(original);
+        const res = await fetch("/api/classify-photo", {
+            method: "POST",
+            headers: { "Content-Type": file.type },
+            body: file,
+        });
+        const classified = await res.json();
+        if (!res.ok) {
+            status.textContent =
+                classified.code === "no_api_key" ? t("ask_no_key")
+                : classified.code === "rate_limited" ? t("bulk_rate_limited")
+                : t("bulk_failed");
+            li.classList.add("failed");
+            offerRetry(original, li, status);
+            return false;
+        }
+        const created = await fetchJson("/api/wardrobe", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                type: classified.type,
+                label: "",
+                values: Object.values(classified.values).flat(),
+            }),
+        });
+        await fetchJson(`/api/wardrobe/${created.id}/photo`, {
+            method: "PUT",
+            headers: { "Content-Type": file.type },
+            body: file,
+        });
+        status.textContent =
+            `✓ ${typeNames[classified.type] || classified.type} ${t("bulk_saved")}`;
+        li.classList.add("done");
+        li.querySelector(".retry-btn")?.remove();
+        return true;
+    } catch (err) {
+        console.error(err);
+        status.textContent = t("bulk_failed");
+        li.classList.add("failed");
+        offerRetry(original, li, status);
+        return false;
+    }
+}
+
+// A failed row gets a retry button; the file stays in memory, so the user
+// never has to re-pick their photos.
+function offerRetry(original, li, status) {
+    if (li.querySelector(".retry-btn")) return;
+    const retry = document.createElement("button");
+    retry.type = "button";
+    retry.className = "link-btn retry-btn";
+    retry.textContent = t("bulk_retry");
+    retry.addEventListener("click", async () => {
+        retry.disabled = true;
+        const ok = await processBulkFile(original, li, status);
+        retry.disabled = false;
+        if (ok) await loadWardrobe();
+    });
+    li.appendChild(retry);
+}
+
 // Bulk add: classify and save each selected photo, reporting per-file
 // progress. Files are processed one by one to keep the API load gentle.
 async function bulkUpload() {
@@ -731,53 +804,27 @@ async function bulkUpload() {
     const progress = $("bulk-progress");
     progress.innerHTML = "";
 
-    for (const original of files) {
+    const rows = files.map((original) => {
         const li = document.createElement("li");
         const label = document.createElement("span");
         label.textContent = original.name;
         const status = document.createElement("span");
         status.className = "bulk-status";
-        status.textContent = t("bulk_reading");
+        status.textContent = "…";
         li.append(label, status);
         progress.appendChild(li);
+        return { original, li, status };
+    });
 
-        try {
-            const file = await shrinkPhoto(original);
-            const res = await fetch("/api/classify-photo", {
-                method: "POST",
-                headers: { "Content-Type": file.type },
-                body: file,
-            });
-            const classified = await res.json();
-            if (!res.ok) {
-                status.textContent =
-                    classified.code === "no_api_key" ? t("ask_no_key") : t("bulk_failed");
-                li.classList.add("failed");
-                continue;
-            }
-            const created = await fetchJson("/api/wardrobe", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    type: classified.type,
-                    label: "",
-                    values: Object.values(classified.values).flat(),
-                }),
-            });
-            await fetchJson(`/api/wardrobe/${created.id}/photo`, {
-                method: "PUT",
-                headers: { "Content-Type": file.type },
-                body: file,
-            });
-            status.textContent =
-                `✓ ${typeNames[classified.type] || classified.type} ${t("bulk_saved")}`;
-            li.classList.add("done");
-        } catch (err) {
-            console.error(err);
-            status.textContent = t("bulk_failed");
-            li.classList.add("failed");
-        }
+    let added = 0;
+    for (const row of rows) {
+        if (await processBulkFile(row.original, row.li, row.status)) added += 1;
     }
+
+    const summary = document.createElement("li");
+    summary.className = "bulk-summary";
+    summary.textContent = t("bulk_summary")(added, files.length);
+    progress.appendChild(summary);
     await loadWardrobe();
 }
 

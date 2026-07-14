@@ -640,8 +640,16 @@ bool Server::run(int port) {
             res.set_content(json{{"type", garment.type_slug}, {"values", values}}.dump(),
                             "application/json");
         } catch (const std::exception& e) {
-            res.status = 500;
-            res.set_content(json{{"error", e.what()}}.dump(), "application/json");
+            // Tell the client when this was the API quota rather than the
+            // photo, so bulk uploads can offer a retry instead of blaming
+            // the image.
+            const std::string what = e.what();
+            const bool rate_limited = what.find("rate limit") != std::string::npos ||
+                                      what.find("RESOURCE_EXHAUSTED") != std::string::npos;
+            res.status = rate_limited ? 429 : 500;
+            json body = {{"error", what}};
+            if (rate_limited) body["code"] = "rate_limited";
+            res.set_content(body.dump(), "application/json");
         }
     });
 
