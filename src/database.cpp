@@ -23,7 +23,8 @@ CREATE TABLE IF NOT EXISTS clothing_items (
     min_temp_c    REAL,                  -- comfortable temperature range
     max_temp_c    REAL,
     is_waterproof INTEGER NOT NULL DEFAULT 0,
-    warmth_level  INTEGER NOT NULL DEFAULT 0  -- 0 (none) .. 5 (very warm)
+    warmth_level  INTEGER NOT NULL DEFAULT 0,  -- 0 (none) .. 5 (very warm)
+    gender        TEXT NOT NULL DEFAULT 'unisex'  -- 'unisex' | 'male' | 'female'
 );
 
 CREATE TABLE IF NOT EXISTS moods (
@@ -143,6 +144,13 @@ Database::~Database() {
 
 void Database::initSchema() {
     execute(kSchema);
+    // Databases created before the gender column existed need it added; the
+    // ALTER fails harmlessly ("duplicate column") on up-to-date databases.
+    try {
+        execute("ALTER TABLE clothing_items ADD COLUMN gender TEXT NOT NULL "
+                "DEFAULT 'unisex';");
+    } catch (const std::runtime_error&) {
+    }
 }
 
 void Database::execute(const std::string& sql) {

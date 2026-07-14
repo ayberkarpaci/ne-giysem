@@ -90,6 +90,13 @@ INSERT OR IGNORE INTO clothing_items
     (54, 6, 'watch',         NULL, NULL, 0, 0),
     (55, 6, 'brooch',        NULL, NULL, 0, 0);
 
+-- Catalog pieces that only make sense for one gender; everything else stays
+-- 'unisex'. UPDATEs keep this idempotent for databases seeded earlier.
+UPDATE clothing_items SET gender = 'female'
+ WHERE slug IN ('heels', 'flats', 'skirt', 'blouse', 'handbag', 'leggings');
+UPDATE clothing_items SET gender = 'male'
+ WHERE slug IN ('tie');
+
 INSERT OR IGNORE INTO moods (id, slug) VALUES
     (1, 'energetic'),
     (2, 'cozy'),

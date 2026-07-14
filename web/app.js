@@ -33,6 +33,10 @@ const STRINGS = {
         rain_label: "Rainy",
         locating: "Locating...",
         location_unknown: "could not detect",
+        gender_label: "Catalog suggestions for",
+        gender_any: "everyone",
+        gender_male: "men",
+        gender_female: "women",
         use_wardrobe: "Recommend from my wardrobe",
         catalog_fallback: "Your wardrobe is empty, so this comes from the general catalog.",
         ask_title: "Tell me your plan",
@@ -94,6 +98,10 @@ const STRINGS = {
         rain_label: "Yağışlı",
         locating: "Konum bulunuyor...",
         location_unknown: "bulunamadı",
+        gender_label: "Katalog önerileri kime göre",
+        gender_any: "herkes",
+        gender_male: "erkek",
+        gender_female: "kadın",
         use_wardrobe: "Gardırobumdan öner",
         catalog_fallback: "Gardırobun boş olduğu için bu öneri genel katalogdan geldi.",
         ask_title: "Planını anlat",
@@ -236,12 +244,13 @@ function initHourSelects() {
     }
 }
 
-// The weather/location choices every recommendation request carries.
+// The weather/location/profile choices every recommendation request carries.
 function weatherOptions() {
     const options = {
         start_hour: Number($("hour-start").value),
         end_hour: Number($("hour-end").value),
     };
+    if ($("gender-select").value) options.gender = $("gender-select").value;
     if (savedLocation) {
         options.lat = savedLocation.latitude;
         options.lon = savedLocation.longitude;
@@ -264,6 +273,7 @@ function weatherQueryString() {
         query += `&lat=${o.lat}&lon=${o.lon}&city=${encodeURIComponent(o.city)}`;
     }
     if (o.temp !== undefined) query += `&temp=${o.temp}&rain=${o.rain ? 1 : 0}`;
+    if (o.gender) query += `&gender=${o.gender}`;
     return query;
 }
 
@@ -358,6 +368,7 @@ function appendFeedbackWidget(box, recommendationId, listId) {
                     rating,
                     comment: comment.value.trim(),
                     lang,
+                    gender: $("gender-select").value || undefined,
                 }),
             });
             box.innerHTML = "";
@@ -750,6 +761,10 @@ $("location-auto-btn").addEventListener("click", async () => {
 $("manual-weather").addEventListener("change", () => {
     $("manual-weather-fields").classList.toggle(
         "hidden", !$("manual-weather").checked);
+});
+$("gender-select").value = localStorage.getItem("gender") || "";
+$("gender-select").addEventListener("change", () => {
+    localStorage.setItem("gender", $("gender-select").value);
 });
 
 initHourSelects();

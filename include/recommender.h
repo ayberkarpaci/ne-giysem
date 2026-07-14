@@ -27,6 +27,10 @@ struct RecommendationRequest {
     // Item type slugs to leave out entirely, e.g. when the user disliked a
     // suggestion and asked for another one.
     std::vector<std::string> exclude_items;
+    // 'male' or 'female' narrows catalog suggestions to unisex + that
+    // gender; empty shows everything. The user's own wardrobe is never
+    // filtered — they own those clothes.
+    std::string gender;
 };
 
 struct RecommendedItem {

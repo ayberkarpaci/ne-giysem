@@ -153,7 +153,8 @@ JOIN clothing_categories c ON c.id = i.category_id
 LEFT JOIN translations ti
        ON ti.entity_type = 'item' AND ti.entity_id = i.id AND ti.lang_code = ?1
 LEFT JOIN translations tc
-       ON tc.entity_type = 'category' AND tc.entity_id = c.id AND tc.lang_code = ?1;
+       ON tc.entity_type = 'category' AND tc.entity_id = c.id AND tc.lang_code = ?1
+WHERE (?2 = '' OR i.gender = 'unisex' OR i.gender = ?2);
 )sql";
 
 const std::string kWardrobeQuery = std::string(kSharedColumns) + R"sql(
@@ -240,6 +241,7 @@ std::vector<RecommendedItem> Recommender::recommend(const RecommendationRequest&
         throw std::runtime_error(std::string("prepare failed: ") + sqlite3_errmsg(db));
     }
     sqlite3_bind_text(stmt, 1, request.lang.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(stmt, 2, request.gender.c_str(), -1, SQLITE_TRANSIENT);
 
     // Best-scoring item per category.
     std::map<std::string, RecommendedItem> best;

@@ -107,6 +107,11 @@ WeatherOverrides overridesFromJson(const json& body) {
     return o;
 }
 
+// Only the two known values pass through; anything else means no filter.
+std::string sanitizeGender(const std::string& gender) {
+    return (gender == "male" || gender == "female") ? gender : "";
+}
+
 // Decides the weather for a recommendation: manual entry wins, then the
 // user's corrected location, then IP geolocation; with an hour window the
 // hourly forecast is averaged, otherwise current/daily conditions are used.
@@ -328,6 +333,7 @@ bool Server::run(int port) {
             // No mood parameter means no mood bias, not a default mood.
             request.mood_slug = req.get_param_value("mood");
             request.lang = req.has_param("lang") ? req.get_param_value("lang") : "en";
+            request.gender = sanitizeGender(req.get_param_value("gender"));
 
             const WeatherReport weather = resolveWeather(overridesFromParams(req), 0);
             request.temperature_c = weather.temperature_c;
@@ -494,6 +500,7 @@ bool Server::run(int port) {
             request.is_raining = weather.is_raining;
             request.mood_slug = parsed.mood_slug.empty() ? "relaxed" : parsed.mood_slug;
             request.lang = lang;
+            request.gender = sanitizeGender(body.value("gender", ""));
             request.colors_preferred = parsed.colors_preferred;
             request.colors_avoided = parsed.colors_avoided;
             request.patterns_preferred = parsed.patterns_preferred;
@@ -614,6 +621,7 @@ bool Server::run(int port) {
             request.mood_weights = weights;
             request.mood_slug = weights.front().first;  // for the response only
             request.lang = lang;
+            request.gender = sanitizeGender(body.value("gender", ""));
 
             std::string source = body.value("source", "catalog");
             if (source == "wardrobe" && WardrobeRepository(db_).count() == 0) {
@@ -680,6 +688,7 @@ bool Server::run(int port) {
                 request.temperature_c = stored->temperature_c;
                 request.is_raining = stored->is_raining;
                 request.lang = body.value("lang", stored->lang);
+                request.gender = sanitizeGender(body.value("gender", ""));
                 request.exclude_items = stored->item_slugs;
 
                 const Recommender recommender(db_);

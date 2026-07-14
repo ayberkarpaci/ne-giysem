@@ -184,6 +184,35 @@ TEST_CASE("no mood at all recommends purely by weather") {
     CHECK_THAT(top->score, WithinAbs(1.0, 1e-9));  // temperature fit only
 }
 
+TEST_CASE("gender narrows the catalog to unisex plus that gender") {
+    Database db = makeSeededDb();
+    RecommendationRequest request;
+    request.temperature_c = 20.0;
+    request.mood_slug = "confident";
+
+    // Confident footwear: heels (0.9, female) beat classic shoes (0.8).
+    request.gender = "female";
+    auto outfit = Recommender(db).recommend(request);
+    const auto* footwear = findCategory(outfit, "footwear");
+    REQUIRE(footwear != nullptr);
+    CHECK(footwear->item_slug == "heels");
+
+    // A man never gets heels or other female-only pieces suggested; the
+    // best remaining confident shoe (loafers) wins instead.
+    request.gender = "male";
+    outfit = Recommender(db).recommend(request);
+    const auto* male_footwear = findCategory(outfit, "footwear");
+    REQUIRE(male_footwear != nullptr);
+    CHECK(male_footwear->item_slug == "loafers");
+
+    // No gender set shows the full catalog.
+    request.gender.clear();
+    outfit = Recommender(db).recommend(request);
+    const auto* any_footwear = findCategory(outfit, "footwear");
+    REQUIRE(any_footwear != nullptr);
+    CHECK(any_footwear->item_slug == "heels");
+}
+
 TEST_CASE("unknown mood throws") {
     Database db = makeSeededDb();
     RecommendationRequest request;
