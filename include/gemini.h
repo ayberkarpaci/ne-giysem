@@ -29,10 +29,11 @@ using MoodWeights = std::vector<std::pair<std::string, double>>;
 // Allowed value slugs per attribute slug, e.g. {"color": {"black", ...}}.
 using AttributeVocabulary = std::map<std::string, std::vector<std::string>>;
 
-// What Gemini reads off a garment photo, in database slugs.
+// What Gemini reads off a garment photo, in database slugs. An attribute may
+// carry several values — most garments are not a single color.
 struct ClassifiedGarment {
     std::string type_slug;                       // one of the clothing_items slugs
-    std::map<std::string, std::string> values;   // attribute slug -> value slug
+    std::map<std::string, std::vector<std::string>> values;  // attribute slug -> value slugs
 };
 
 // Pure helpers, exposed for unit testing.

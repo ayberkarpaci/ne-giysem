@@ -97,9 +97,11 @@ std::string buildClassifyPrompt(const std::vector<std::string>& type_slugs,
         prompt << "- " << attribute << ": [" << joinQuoted(values) << "]\n";
     }
     prompt << "Reply with ONLY a JSON object, no markdown, matching exactly:\n"
-           << "{\"type\": <garment type>, \"values\": {\"<attribute>\": <value or null>, ...}}\n"
-           << "Pick the closest type. For each attribute pick one allowed value, or null "
-              "when it is unclear, not visible or not applicable.";
+           << "{\"type\": <garment type>, \"values\": {\"<attribute>\": <value, array of "
+              "values, or null>, ...}}\n"
+           << "Pick the closest type. For \"color\" list every clearly visible color "
+              "(up to 3, dominant first). For each other attribute pick one allowed "
+              "value, or null when it is unclear, not visible or not applicable.";
     return prompt.str();
 }
 
@@ -204,10 +206,24 @@ ClassifiedGarment parseClassifiedGarmentJson(const std::string& text,
     if (j.contains("values") && j["values"].is_object()) {
         for (const auto& [attribute, value] : j["values"].items()) {
             const auto vocab_it = attribute_values.find(attribute);
-            if (vocab_it == attribute_values.end() || !value.is_string()) continue;
-            if (contains(vocab_it->second, value.get<std::string>())) {
-                garment.values[attribute] = value;
+            if (vocab_it == attribute_values.end()) continue;
+            // The model may answer with one value or an array (multi-color
+            // garments); normalize to a list and keep only known slugs.
+            std::vector<std::string> candidates;
+            if (value.is_string()) {
+                candidates.push_back(value.get<std::string>());
+            } else if (value.is_array()) {
+                for (const auto& entry : value) {
+                    if (entry.is_string()) candidates.push_back(entry.get<std::string>());
+                }
             }
+            for (const auto& candidate : candidates) {
+                if (contains(vocab_it->second, candidate) &&
+                    !contains(garment.values[attribute], candidate)) {
+                    garment.values[attribute].push_back(candidate);
+                }
+            }
+            if (garment.values[attribute].empty()) garment.values.erase(attribute);
         }
     }
     return garment;

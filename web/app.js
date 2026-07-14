@@ -261,15 +261,46 @@ async function loadTypes() {
     await loadAttributes();
 }
 
+// Multi-value attributes render as toggle chips instead of a single select.
+const MULTI_ATTRIBUTES = ["color"];
+
+// Selected value slugs per attribute slug, from both selects and chip groups.
+function selectedAttributeValues() {
+    const container = $("attribute-selects");
+    const values = {};
+    for (const select of container.querySelectorAll("select")) {
+        if (select.value) values[select.dataset.attribute] = [select.value];
+    }
+    for (const group of container.querySelectorAll(".attr-chips")) {
+        const picked = [...group.querySelectorAll("button.selected")].map(
+            (b) => b.dataset.slug);
+        if (picked.length > 0) values[group.dataset.attribute] = picked;
+    }
+    return values;
+}
+
+function setAttributeValues(values) {
+    const container = $("attribute-selects");
+    for (const select of container.querySelectorAll("select")) {
+        const wanted = values[select.dataset.attribute];
+        if (!wanted) continue;
+        const slug = wanted[0];
+        if ([...select.options].some((o) => o.value === slug)) select.value = slug;
+    }
+    for (const group of container.querySelectorAll(".attr-chips")) {
+        const wanted = values[group.dataset.attribute] || [];
+        for (const btn of group.querySelectorAll("button")) {
+            btn.classList.toggle("selected", wanted.includes(btn.dataset.slug));
+        }
+    }
+}
+
 async function loadAttributes() {
     const type = $("type-select").value;
     const container = $("attribute-selects");
-    // Rebuilding the selects (e.g. after the user corrects the type) must not
+    // Rebuilding the controls (e.g. after the user corrects the type) must not
     // lose what is already picked — keep values for attributes that survive.
-    const previous = {};
-    for (const select of container.querySelectorAll("select")) {
-        if (select.value) previous[select.dataset.attribute] = select.value;
-    }
+    const previous = selectedAttributeValues();
     container.innerHTML = "";
     if (!type) return;
     const data = await fetchJson(`/api/attributes?type=${type}&lang=${lang}`);
@@ -277,25 +308,38 @@ async function loadAttributes() {
         const label = document.createElement("label");
         const caption = document.createElement("span");
         caption.textContent = attr.name;
-        const select = document.createElement("select");
-        select.dataset.attribute = attr.slug;
-        const none = document.createElement("option");
-        none.value = "";
-        none.textContent = t("choose");
-        select.appendChild(none);
-        for (const v of attr.values) {
-            const option = document.createElement("option");
-            option.value = v.slug;
-            option.textContent = v.name;
-            select.appendChild(option);
+        if (MULTI_ATTRIBUTES.includes(attr.slug)) {
+            const chips = document.createElement("div");
+            chips.className = "chips attr-chips";
+            chips.dataset.attribute = attr.slug;
+            for (const v of attr.values) {
+                const btn = document.createElement("button");
+                btn.type = "button";
+                btn.dataset.slug = v.slug;
+                btn.textContent = v.name;
+                btn.addEventListener("click", () =>
+                    btn.classList.toggle("selected"));
+                chips.appendChild(btn);
+            }
+            label.append(caption, chips);
+        } else {
+            const select = document.createElement("select");
+            select.dataset.attribute = attr.slug;
+            const none = document.createElement("option");
+            none.value = "";
+            none.textContent = t("choose");
+            select.appendChild(none);
+            for (const v of attr.values) {
+                const option = document.createElement("option");
+                option.value = v.slug;
+                option.textContent = v.name;
+                select.appendChild(option);
+            }
+            label.append(caption, select);
         }
-        if (previous[attr.slug] &&
-            attr.values.some((v) => v.slug === previous[attr.slug])) {
-            select.value = previous[attr.slug];
-        }
-        label.append(caption, select);
         container.appendChild(label);
     }
+    setAttributeValues(previous);
 }
 
 async function loadWardrobe() {
@@ -373,10 +417,7 @@ async function classifyPhoto() {
         }
         $("type-select").value = data.type;
         await loadAttributes();
-        for (const select of $("attribute-selects").querySelectorAll("select")) {
-            const value = data.values[select.dataset.attribute];
-            if (value) select.value = value;
-        }
+        setAttributeValues(data.values);  // every value is an array of slugs
         note.textContent = t("classified");
     } catch (err) {
         console.error(err);
@@ -390,9 +431,7 @@ async function saveItem() {
     btn.textContent = t("saving");
     $("error").classList.add("hidden");
     try {
-        const values = [...$("attribute-selects").querySelectorAll("select")]
-            .map((s) => s.value)
-            .filter((v) => v !== "");
+        const values = Object.values(selectedAttributeValues()).flat();
         const body = {
             type: $("type-select").value,
             label: $("label-input").value.trim(),

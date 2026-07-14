@@ -243,7 +243,8 @@ INSERT OR IGNORE INTO attributes (id, slug) VALUES
     (4, 'fit'),
     (5, 'pattern'),
     (6, 'sleeve'),
-    (7, 'metal');
+    (7, 'metal'),
+    (8, 'color-tone');
 
 INSERT OR IGNORE INTO category_attributes (category_id, attribute_id) VALUES
     -- color applies everywhere
@@ -258,7 +259,10 @@ INSERT OR IGNORE INTO category_attributes (category_id, attribute_id) VALUES
     -- sleeve only for tops
     (2, 6),
     -- jewelry gets color (stones, straps) and metal
-    (6, 1), (6, 7);
+    (6, 1), (6, 7),
+    -- color tone (vivid, pastel, ...) applies everywhere; it mainly feeds
+    -- the classifier and recommender rather than the user's eye
+    (1, 8), (2, 8), (3, 8), (4, 8), (5, 8), (6, 8);
 
 INSERT OR IGNORE INTO attribute_values (id, attribute_id, slug) VALUES
     (1,  1, 'black'),   (2,  1, 'white'),  (3,  1, 'gray'),
@@ -275,7 +279,9 @@ INSERT OR IGNORE INTO attribute_values (id, attribute_id, slug) VALUES
     (33, 6, 'long-sleeve'), (34, 6, 'short-sleeve'), (35, 6, 'sleeveless'),
     (36, 2, 'silk'),      (37, 2, 'corduroy'),
     (38, 7, 'gold'),      (39, 7, 'silver'),     (40, 7, 'rose-gold'),
-    (41, 7, 'steel');
+    (41, 7, 'steel'),
+    (42, 8, 'vivid'),     (43, 8, 'pastel'),     (44, 8, 'muted'),
+    (45, 8, 'dark'),      (46, 8, 'light'),      (47, 8, 'neutral');
 
 INSERT OR IGNORE INTO translations (entity_type, entity_id, lang_code, name) VALUES
     ('attribute', 1, 'en', 'Color'),        ('attribute', 1, 'tr', 'Renk'),
@@ -285,6 +291,7 @@ INSERT OR IGNORE INTO translations (entity_type, entity_id, lang_code, name) VAL
     ('attribute', 5, 'en', 'Pattern'),      ('attribute', 5, 'tr', 'Desen'),
     ('attribute', 6, 'en', 'Sleeve'),       ('attribute', 6, 'tr', 'Kol'),
     ('attribute', 7, 'en', 'Metal'),        ('attribute', 7, 'tr', 'Metal'),
+    ('attribute', 8, 'en', 'Color tone'),   ('attribute', 8, 'tr', 'Renk tonu'),
 
     ('attribute_value', 1,  'en', 'Black'),      ('attribute_value', 1,  'tr', 'Siyah'),
     ('attribute_value', 2,  'en', 'White'),      ('attribute_value', 2,  'tr', 'Beyaz'),
@@ -326,7 +333,13 @@ INSERT OR IGNORE INTO translations (entity_type, entity_id, lang_code, name) VAL
     ('attribute_value', 38, 'en', 'Gold'),       ('attribute_value', 38, 'tr', 'Altın'),
     ('attribute_value', 39, 'en', 'Silver'),     ('attribute_value', 39, 'tr', 'Gümüş'),
     ('attribute_value', 40, 'en', 'Rose gold'),  ('attribute_value', 40, 'tr', 'Roze altın'),
-    ('attribute_value', 41, 'en', 'Steel'),      ('attribute_value', 41, 'tr', 'Çelik');
+    ('attribute_value', 41, 'en', 'Steel'),      ('attribute_value', 41, 'tr', 'Çelik'),
+    ('attribute_value', 42, 'en', 'Vivid'),      ('attribute_value', 42, 'tr', 'Canlı'),
+    ('attribute_value', 43, 'en', 'Pastel'),     ('attribute_value', 43, 'tr', 'Pastel'),
+    ('attribute_value', 44, 'en', 'Muted'),      ('attribute_value', 44, 'tr', 'Soluk'),
+    ('attribute_value', 45, 'en', 'Dark'),       ('attribute_value', 45, 'tr', 'Koyu'),
+    ('attribute_value', 46, 'en', 'Light'),      ('attribute_value', 46, 'tr', 'Açık'),
+    ('attribute_value', 47, 'en', 'Neutral'),    ('attribute_value', 47, 'tr', 'Nötr');
 )sql";
 
 }  // namespace

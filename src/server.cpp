@@ -432,8 +432,8 @@ bool Server::run(int port) {
                                      attributeVocabulary(db_));
 
             json values = json::object();
-            for (const auto& [attribute, value] : garment.values) {
-                values[attribute] = value;
+            for (const auto& [attribute, slugs] : garment.values) {
+                values[attribute] = slugs;  // always an array, even for one value
             }
             res.set_content(json{{"type", garment.type_slug}, {"values", values}}.dump(),
                             "application/json");

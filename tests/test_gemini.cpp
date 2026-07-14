@@ -75,8 +75,14 @@ TEST_CASE("garment classification") {
             types, vocabulary);
         CHECK(garment.type_slug == "jersey");
         REQUIRE(garment.values.size() == 2);
-        CHECK(garment.values.at("color") == "red");
-        CHECK(garment.values.at("pattern") == "striped");
+        CHECK(garment.values.at("color") == std::vector<std::string>{"red"});
+        CHECK(garment.values.at("pattern") == std::vector<std::string>{"striped"});
+    }
+    SECTION("accepts several colors and drops unknown or repeated ones") {
+        const auto garment = negiysem::parseClassifiedGarmentJson(
+            R"({"type":"jersey","values":{"color":["red","black","red","neon"]}})",
+            types, vocabulary);
+        CHECK(garment.values.at("color") == std::vector<std::string>({"red", "black"}));
     }
     SECTION("drops null, unknown and out-of-vocabulary values") {
         const auto garment = negiysem::parseClassifiedGarmentJson(
