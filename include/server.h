@@ -25,7 +25,8 @@ std::string outfitToJson(const std::vector<RecommendedItem>& outfit,
                          const WeatherReport& weather,
                          const std::string& mood_slug,
                          const std::string& source = "catalog",
-                         int recommendation_id = 0);
+                         int recommendation_id = 0,
+                         const std::string& explanation = "");
 std::string moodsToJson(Database& db, const std::string& lang);
 
 // HTTP server: serves the static web UI plus a small JSON API.

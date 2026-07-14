@@ -42,9 +42,17 @@ std::string buildParsePrompt(const std::string& user_text, const std::string& to
 std::string buildMoodPrompt(const std::string& user_text);
 std::string buildClassifyPrompt(const std::vector<std::string>& type_slugs,
                                 const AttributeVocabulary& attribute_values);
+// What the stylist pass produces: the chosen items plus one warm sentence
+// (in the requested language) saying why the combination works.
+struct StyledOutfit {
+    std::vector<RecommendedItem> items;
+    std::string reason;  // may be empty when the model skips it
+};
+
 std::string buildStylistPrompt(const std::string& context,
                                const OutfitCandidates& candidates,
-                               const Weather& weather);
+                               const Weather& weather,
+                               const std::string& lang);
 std::string extractGeminiText(const std::string& api_response_json);
 ParsedRequest parseParsedRequestJson(const std::string& text);
 MoodWeights parseMoodWeightsJson(const std::string& text);
@@ -52,8 +60,8 @@ MoodWeights parseMoodWeightsJson(const std::string& text);
 // item per category, core categories (top, bottom, footwear) backfilled
 // with the best candidate when the model skips them. Throws when the
 // response is not parseable at all.
-std::vector<RecommendedItem> parseStylistPicksJson(const std::string& text,
-                                                   const OutfitCandidates& candidates);
+StyledOutfit parseStylistPicksJson(const std::string& text,
+                                   const OutfitCandidates& candidates);
 // Throws when no valid garment type is found; invalid values are dropped.
 ClassifiedGarment parseClassifiedGarmentJson(const std::string& text,
                                              const std::vector<std::string>& type_slugs,
@@ -82,11 +90,13 @@ public:
                                       const AttributeVocabulary& attribute_values) const;
 
     // Picks the most coherent outfit from scored candidates, applying
-    // fashion rules (color harmony, consistent formality) in the prompt.
+    // fashion rules (color harmony, consistent formality) in the prompt,
+    // and explains the choice in one sentence in `lang`.
     // Throws on API or parse failure — callers fall back to the top picks.
-    std::vector<RecommendedItem> styleOutfit(const std::string& context,
-                                             const OutfitCandidates& candidates,
-                                             const Weather& weather) const;
+    StyledOutfit styleOutfit(const std::string& context,
+                             const OutfitCandidates& candidates,
+                             const Weather& weather,
+                             const std::string& lang) const;
 
     // One friendly sentence (in `lang`) explaining the chosen outfit.
     std::string explainOutfit(const std::string& user_text,

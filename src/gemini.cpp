@@ -107,7 +107,8 @@ std::string buildClassifyPrompt(const std::vector<std::string>& type_slugs,
 
 std::string buildStylistPrompt(const std::string& context,
                                const OutfitCandidates& candidates,
-                               const Weather& weather) {
+                               const Weather& weather,
+                               const std::string& lang) {
     std::ostringstream prompt;
     prompt << "You are a fashion stylist assembling ONE coherent outfit.\n"
            << "Situation: " << context << "\n"
@@ -142,7 +143,11 @@ std::string buildStylistPrompt(const std::string& context,
               "families; avoid clashing saturated colors together.\n"
            << "- At most one boldly patterned piece per outfit.\n"
            << "Reply with ONLY a JSON object, no markdown, matching exactly:\n"
-           << "{\"picks\": {\"<category>\": <number>, ...}}";
+           << "{\"picks\": {\"<category>\": <number>, ...}, \"reason\": <string>}\n"
+           << "\"reason\" is ONE warm, natural sentence (max 25 words) in the "
+              "language with BCP 47 code '" << lang
+           << "' telling the user why this combination works for the weather "
+              "and their situation.";
     return prompt.str();
 }
 
@@ -215,8 +220,8 @@ ParsedRequest parseParsedRequestJson(const std::string& text) {
     return parsed;
 }
 
-std::vector<RecommendedItem> parseStylistPicksJson(const std::string& text,
-                                                   const OutfitCandidates& candidates) {
+StyledOutfit parseStylistPicksJson(const std::string& text,
+                                   const OutfitCandidates& candidates) {
     const json j = json::parse(stripCodeFences(text), nullptr, /*allow_exceptions=*/false);
     if (j.is_discarded() || !j.is_object() || !j.contains("picks") ||
         !j["picks"].is_object()) {
@@ -243,7 +248,12 @@ std::vector<RecommendedItem> parseStylistPicksJson(const std::string& text,
     std::sort(outfit.begin(), outfit.end(), [](const auto& a, const auto& b) {
         return a.score > b.score;
     });
-    return outfit;
+    StyledOutfit styled;
+    styled.items = std::move(outfit);
+    if (j.contains("reason") && j["reason"].is_string()) {
+        styled.reason = j["reason"];
+    }
+    return styled;
 }
 
 MoodWeights parseMoodWeightsJson(const std::string& text) {
@@ -365,11 +375,13 @@ MoodWeights GeminiClient::analyzeMood(const std::string& user_text) const {
     return parseMoodWeightsJson(generate(buildMoodPrompt(user_text), /*json_response=*/true));
 }
 
-std::vector<RecommendedItem> GeminiClient::styleOutfit(const std::string& context,
-                                                       const OutfitCandidates& candidates,
-                                                       const Weather& weather) const {
+StyledOutfit GeminiClient::styleOutfit(const std::string& context,
+                                       const OutfitCandidates& candidates,
+                                       const Weather& weather,
+                                       const std::string& lang) const {
     return parseStylistPicksJson(
-        generate(buildStylistPrompt(context, candidates, weather), /*json_response=*/true),
+        generate(buildStylistPrompt(context, candidates, weather, lang),
+                 /*json_response=*/true),
         candidates);
 }
 

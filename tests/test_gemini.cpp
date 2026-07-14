@@ -137,38 +137,43 @@ TEST_CASE("stylist prompt and picks") {
 
     SECTION("buildStylistPrompt numbers candidates and includes attributes") {
         const auto prompt =
-            negiysem::buildStylistPrompt("dinner date", candidates, {18.0, false});
+            negiysem::buildStylistPrompt("dinner date", candidates, {18.0, false}, "tr");
         CHECK_THAT(prompt, ContainsSubstring("dinner date"));
         CHECK_THAT(prompt, ContainsSubstring("1) t-shirt (gray, solid)"));
         CHECK_THAT(prompt, ContainsSubstring("2) shirt (white)"));
         CHECK_THAT(prompt, ContainsSubstring("1) sneakers"));
         CHECK_THAT(prompt, ContainsSubstring("formality"));
+        CHECK_THAT(prompt, ContainsSubstring("'tr'"));
     }
-    SECTION("valid picks map back to the items") {
-        const auto outfit = negiysem::parseStylistPicksJson(
-            R"({"picks":{"top":2,"bottom":1,"footwear":1}})", candidates);
-        REQUIRE(outfit.size() == 3);
-        CHECK(outfit[0].item_slug == "shirt");  // sorted by score
-        CHECK(outfit[1].item_slug == "jeans");
-        CHECK(outfit[2].item_slug == "sneakers");
+    SECTION("valid picks map back to the items, with the reason") {
+        const auto styled = negiysem::parseStylistPicksJson(
+            R"({"picks":{"top":2,"bottom":1,"footwear":1},"reason":"crisp and clean"})",
+            candidates);
+        REQUIRE(styled.items.size() == 3);
+        CHECK(styled.items[0].item_slug == "shirt");  // sorted by score
+        CHECK(styled.items[1].item_slug == "jeans");
+        CHECK(styled.items[2].item_slug == "sneakers");
+        CHECK(styled.reason == "crisp and clean");
     }
-    SECTION("skipped optional categories stay out") {
-        const auto outfit = negiysem::parseStylistPicksJson(
+    SECTION("skipped optional categories stay out; reason may be missing") {
+        const auto styled = negiysem::parseStylistPicksJson(
             R"({"picks":{"top":1,"bottom":1,"footwear":1}})", candidates);
-        for (const auto& item : outfit) {
+        for (const auto& item : styled.items) {
             CHECK(item.category_slug != "accessory");
         }
+        CHECK(styled.reason.empty());
     }
     SECTION("core categories are backfilled when dropped or out of range") {
-        const auto outfit = negiysem::parseStylistPicksJson(
+        const auto styled = negiysem::parseStylistPicksJson(
             R"({"picks":{"top":99,"accessory":1}})", candidates);
         std::vector<std::string> categories;
-        for (const auto& item : outfit) categories.push_back(item.category_slug);
+        for (const auto& item : styled.items) categories.push_back(item.category_slug);
         CHECK(std::count(categories.begin(), categories.end(), "top") == 1);
         CHECK(std::count(categories.begin(), categories.end(), "bottom") == 1);
         CHECK(std::count(categories.begin(), categories.end(), "footwear") == 1);
         // The out-of-range pick fell back to the best top.
-        const auto top = std::find_if(outfit.begin(), outfit.end(), [](const auto& i) {
+        const auto top = std::find_if(styled.items.begin(), styled.items.end(),
+                                      [](const auto& i) {
             return i.category_slug == "top";
         });
         CHECK(top->item_slug == "t-shirt");

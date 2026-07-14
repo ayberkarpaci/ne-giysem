@@ -449,6 +449,8 @@ async function recommend() {
             !(useWardrobe && data.source === "catalog"));
 
         renderOutfitList($("outfit-list"), data.outfit);
+        $("explanation").textContent = data.explanation || "";
+        $("explanation").classList.toggle("hidden", !data.explanation);
         renderFeedback("feedback-box", data.recommendation_id, "outfit-list");
         $("result").classList.remove("hidden");
     } catch (err) {

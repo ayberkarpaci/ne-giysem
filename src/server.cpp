@@ -161,7 +161,8 @@ std::string outfitToJson(const std::vector<RecommendedItem>& outfit,
                          const WeatherReport& weather,
                          const std::string& mood_slug,
                          const std::string& source,
-                         int recommendation_id) {
+                         int recommendation_id,
+                         const std::string& explanation) {
     json items = json::array();
     for (const auto& item : outfit) {
         items.push_back(itemToJson(item));
@@ -171,6 +172,7 @@ std::string outfitToJson(const std::vector<RecommendedItem>& outfit,
         {"mood", mood_slug},
         {"source", source},
         {"outfit", items},
+        {"explanation", explanation},
     };
     if (recommendation_id > 0) body["recommendation_id"] = recommendation_id;
     return body.dump();
@@ -346,14 +348,46 @@ bool Server::run(int port) {
                 source = "catalog";
             }
             const Recommender recommender(db_);
-            const auto outfit = source == "wardrobe"
-                                    ? recommender.recommendFromWardrobe(request)
-                                    : recommender.recommend(request);
+
+            // With a Gemini key the stylist assembles and explains the
+            // outfit here too; without one the rule-based picks still work.
+            std::vector<RecommendedItem> outfit;
+            std::string explanation;
+            const std::string api_key = getConfigValue("GEMINI_API_KEY");
+            if (!api_key.empty()) {
+                try {
+                    std::string model = getConfigValue("GEMINI_MODEL");
+                    if (model.empty()) model = "gemini-flash-latest";
+                    Weather conditions;
+                    conditions.temperature_c = request.temperature_c;
+                    conditions.is_raining = request.is_raining;
+                    const std::string context =
+                        request.mood_slug.empty()
+                            ? "An everyday outfit; no particular plan or mood was given."
+                            : "An everyday outfit; the user's mood is '" +
+                                  request.mood_slug + "'.";
+                    const auto candidates =
+                        source == "wardrobe"
+                            ? recommender.candidatesFromWardrobe(request, 3)
+                            : recommender.candidates(request, 3);
+                    const StyledOutfit styled = GeminiClient(api_key, model)
+                        .styleOutfit(context, candidates, conditions, request.lang);
+                    outfit = styled.items;
+                    explanation = styled.reason;
+                } catch (const std::exception& e) {
+                    std::cerr << "stylist failed: " << e.what() << std::endl;
+                }
+            }
+            if (outfit.empty()) {
+                outfit = source == "wardrobe" ? recommender.recommendFromWardrobe(request)
+                                              : recommender.recommend(request);
+            }
             if (source != "wardrobe") source = "catalog";
 
             const int rec_id =
                 FeedbackRepository(db_).recordRecommendation(request, outfit, source);
-            res.set_content(outfitToJson(outfit, weather, request.mood_slug, source, rec_id),
+            res.set_content(outfitToJson(outfit, weather, request.mood_slug, source, rec_id,
+                                         explanation),
                             "application/json");
         } catch (const std::exception& e) {
             res.status = 500;
@@ -513,14 +547,18 @@ bool Server::run(int port) {
             conditions.is_raining = weather.is_raining;
 
             // A stylist pass picks the most coherent combination from the
-            // top candidates; the plain best-per-category outfit is the
-            // fallback when it fails.
+            // top candidates and says why; the plain best-per-category
+            // outfit is the fallback when it fails.
             std::vector<RecommendedItem> outfit;
+            std::string explanation;
             try {
                 const auto candidates =
                     use_wardrobe ? recommender.candidatesFromWardrobe(request, 3)
                                  : recommender.candidates(request, 3);
-                outfit = gemini.styleOutfit(text, candidates, conditions);
+                const StyledOutfit styled =
+                    gemini.styleOutfit(text, candidates, conditions, lang);
+                outfit = styled.items;
+                explanation = styled.reason;
             } catch (const std::exception& e) {
                 std::cerr << "stylist failed: " << e.what() << std::endl;
             }
@@ -528,14 +566,14 @@ bool Server::run(int port) {
                 outfit = use_wardrobe ? recommender.recommendFromWardrobe(request)
                                       : recommender.recommend(request);
             }
-
             // The explanation is presentation only: if it fails, the outfit
             // still goes out.
-            std::string explanation;
-            try {
-                explanation = gemini.explainOutfit(text, outfit, conditions, lang);
-            } catch (const std::exception& e) {
-                std::cerr << "explanation failed: " << e.what() << std::endl;
+            if (explanation.empty()) {
+                try {
+                    explanation = gemini.explainOutfit(text, outfit, conditions, lang);
+                } catch (const std::exception& e) {
+                    std::cerr << "explanation failed: " << e.what() << std::endl;
+                }
             }
 
             const int rec_id = FeedbackRepository(db_).recordRecommendation(
@@ -647,6 +685,7 @@ bool Server::run(int port) {
 
             // Same stylist pass as /api/ask, with the mood answer as context.
             std::vector<RecommendedItem> outfit;
+            std::string explanation;
             try {
                 Weather conditions;
                 conditions.temperature_c = weather.temperature_c;
@@ -654,7 +693,10 @@ bool Server::run(int port) {
                 const auto candidates =
                     source == "wardrobe" ? recommender.candidatesFromWardrobe(request, 3)
                                          : recommender.candidates(request, 3);
-                outfit = gemini.styleOutfit(text, candidates, conditions);
+                const StyledOutfit styled =
+                    gemini.styleOutfit(text, candidates, conditions, lang);
+                outfit = styled.items;
+                explanation = styled.reason;
             } catch (const std::exception& e) {
                 std::cerr << "stylist failed: " << e.what() << std::endl;
             }
@@ -685,6 +727,7 @@ bool Server::run(int port) {
                     {"moods", moods},
                     {"source", source},
                     {"outfit", items},
+                    {"explanation", explanation},
                 }
                     .dump(),
                 "application/json");
