@@ -16,6 +16,7 @@
 
 #include "database.h"
 #include "env.h"
+#include "feedback.h"
 #include "gemini.h"
 #include "recommender.h"
 #include "wardrobe.h"
@@ -154,17 +155,19 @@ WeatherReport resolveWeather(const WeatherOverrides& overrides, int day_offset) 
 std::string outfitToJson(const std::vector<RecommendedItem>& outfit,
                          const WeatherReport& weather,
                          const std::string& mood_slug,
-                         const std::string& source) {
+                         const std::string& source,
+                         int recommendation_id) {
     json items = json::array();
     for (const auto& item : outfit) {
         items.push_back(itemToJson(item));
     }
-    const json body = {
+    json body = {
         {"weather", weatherToJson(weather)},
         {"mood", mood_slug},
         {"source", source},
         {"outfit", items},
     };
+    if (recommendation_id > 0) body["recommendation_id"] = recommendation_id;
     return body.dump();
 }
 
@@ -341,7 +344,9 @@ bool Server::run(int port) {
                                     : recommender.recommend(request);
             if (source != "wardrobe") source = "catalog";
 
-            res.set_content(outfitToJson(outfit, weather, request.mood_slug, source),
+            const int rec_id =
+                FeedbackRepository(db_).recordRecommendation(request, outfit, source);
+            res.set_content(outfitToJson(outfit, weather, request.mood_slug, source, rec_id),
                             "application/json");
         } catch (const std::exception& e) {
             res.status = 500;
@@ -510,12 +515,15 @@ bool Server::run(int port) {
                 std::cerr << "explanation failed: " << e.what() << std::endl;
             }
 
+            const int rec_id = FeedbackRepository(db_).recordRecommendation(
+                request, outfit, use_wardrobe ? "wardrobe" : "catalog");
             json items = json::array();
             for (const auto& item : outfit) {
                 items.push_back(itemToJson(item));
             }
             res.set_content(
                 json{
+                    {"recommendation_id", rec_id},
                     {"weather", weatherToJson(weather)},
                     {"parsed",
                      {{"day_offset", parsed.day_offset},
@@ -624,12 +632,15 @@ bool Server::run(int port) {
                                  {"name", name_it != names.end() ? name_it->second : slug},
                                  {"weight", weight}});
             }
+            const int rec_id =
+                FeedbackRepository(db_).recordRecommendation(request, outfit, source);
             json items = json::array();
             for (const auto& item : outfit) {
                 items.push_back(itemToJson(item));
             }
             res.set_content(
                 json{
+                    {"recommendation_id", rec_id},
                     {"weather", weatherToJson(weather)},
                     {"moods", moods},
                     {"source", source},
@@ -639,6 +650,56 @@ bool Server::run(int port) {
                 "application/json");
         } catch (const std::exception& e) {
             res.status = 500;
+            res.set_content(json{{"error", e.what()}}.dump(), "application/json");
+        }
+    });
+
+    server.Post("/api/feedback", [this](const httplib::Request& req, httplib::Response& res) {
+        try {
+            const json body = json::parse(req.body);
+            const int id = body.at("recommendation_id").get<int>();
+            const int rating = body.at("rating").get<int>();
+            const std::string comment = body.value("comment", "");
+
+            FeedbackRepository repo(db_);
+            if (!repo.addFeedback(id, rating, comment)) {
+                res.status = 404;
+                res.set_content(json{{"error", "no such recommendation"}}.dump(),
+                                "application/json");
+                return;
+            }
+
+            json response = {{"ok", true}};
+            // A poor rating earns an immediate alternative: same context,
+            // but with everything from the disliked outfit left out.
+            if (rating <= 2) {
+                const auto stored = repo.recommendation(id);
+                RecommendationRequest request;
+                request.mood_slug =
+                    stored->mood_slug.empty() ? "relaxed" : stored->mood_slug;
+                request.temperature_c = stored->temperature_c;
+                request.is_raining = stored->is_raining;
+                request.lang = body.value("lang", stored->lang);
+                request.exclude_items = stored->item_slugs;
+
+                const Recommender recommender(db_);
+                const auto outfit = stored->source == "wardrobe"
+                                        ? recommender.recommendFromWardrobe(request)
+                                        : recommender.recommend(request);
+                if (!outfit.empty()) {
+                    response["recommendation_id"] =
+                        repo.recordRecommendation(request, outfit, stored->source);
+                    json items = json::array();
+                    for (const auto& item : outfit) {
+                        items.push_back(itemToJson(item));
+                    }
+                    response["outfit"] = items;
+                    response["source"] = stored->source;
+                }
+            }
+            res.set_content(response.dump(), "application/json");
+        } catch (const std::exception& e) {
+            res.status = 400;
             res.set_content(json{{"error", e.what()}}.dump(), "application/json");
         }
     });

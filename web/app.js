@@ -53,6 +53,12 @@ const STRINGS = {
         classifying: "Reading the photo...",
         classified: "✨ Filled in from the photo — check the fields and save.",
         classify_error: "Could not recognize the photo; pick the fields yourself.",
+        rate_title: "Rate this suggestion:",
+        comment_placeholder: "Add a comment (optional)",
+        send_feedback: "Send",
+        feedback_thanks: "Thanks! I'll learn from this.",
+        revised_note: "Not your style — here's another idea:",
+        feedback_error: "Could not send the feedback.",
     },
     tr: {
         mood_title: "Bugün nasıl hissediyorsun?",
@@ -108,6 +114,12 @@ const STRINGS = {
         classifying: "Fotoğraf inceleniyor...",
         classified: "✨ Fotoğraftan dolduruldu — alanları kontrol edip kaydet.",
         classify_error: "Fotoğraf tanınamadı; alanları kendin seçebilirsin.",
+        rate_title: "Bu öneriyi puanla:",
+        comment_placeholder: "İstersen yorum ekle (isteğe bağlı)",
+        send_feedback: "Gönder",
+        feedback_thanks: "Teşekkürler! Bundan ders çıkaracağım.",
+        revised_note: "Beğenmedin — işte başka bir fikir:",
+        feedback_error: "Geri bildirim gönderilemedi.",
     },
 };
 
@@ -288,6 +300,86 @@ async function fetchJson(url, options) {
     return res.json();
 }
 
+// Star rating + optional comment under an outfit. A poor rating may get a
+// revised outfit back, which replaces the list and gets its own widget.
+function renderFeedback(boxId, recommendationId, listId) {
+    const box = $(boxId);
+    box.innerHTML = "";
+    if (recommendationId) appendFeedbackWidget(box, recommendationId, listId);
+}
+
+function appendFeedbackWidget(box, recommendationId, listId) {
+    const note = (key) => {
+        const p = document.createElement("p");
+        p.className = "note";
+        p.textContent = t(key);
+        return p;
+    };
+    const widget = document.createElement("div");
+    widget.appendChild(note("rate_title"));
+
+    let rating = 0;
+    const stars = document.createElement("div");
+    stars.className = "stars";
+    const starButtons = [];
+    for (let i = 1; i <= 5; ++i) {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.textContent = "☆";
+        btn.addEventListener("click", () => {
+            rating = i;
+            starButtons.forEach((s, idx) => (s.textContent = idx < i ? "★" : "☆"));
+            detail.classList.remove("hidden");
+        });
+        starButtons.push(btn);
+        stars.appendChild(btn);
+    }
+    widget.appendChild(stars);
+
+    const detail = document.createElement("div");
+    detail.className = "feedback-detail hidden";
+    const comment = document.createElement("textarea");
+    comment.rows = 2;
+    comment.maxLength = 300;
+    comment.placeholder = t("comment_placeholder");
+    const send = document.createElement("button");
+    send.type = "button";
+    send.className = "send-feedback";
+    send.textContent = t("send_feedback");
+    send.addEventListener("click", async () => {
+        if (!rating) return;
+        send.disabled = true;
+        try {
+            const data = await fetchJson("/api/feedback", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    recommendation_id: recommendationId,
+                    rating,
+                    comment: comment.value.trim(),
+                    lang,
+                }),
+            });
+            box.innerHTML = "";
+            box.appendChild(note("feedback_thanks"));
+            if (data.outfit) {
+                box.appendChild(note("revised_note"));
+                renderOutfitList($(listId), data.outfit);
+                if (data.recommendation_id) {
+                    appendFeedbackWidget(box, data.recommendation_id, listId);
+                }
+            }
+        } catch (err) {
+            console.error(err);
+            send.disabled = false;
+            showError(t("feedback_error"));
+        }
+    });
+    detail.append(comment, send);
+    widget.appendChild(detail);
+    box.appendChild(widget);
+}
+
 async function loadMoods() {
     const data = await fetchJson(`/api/moods?lang=${lang}`);
     const chips = $("mood-chips");
@@ -344,6 +436,7 @@ async function recommend() {
             !(useWardrobe && data.source === "catalog"));
 
         renderOutfitList($("outfit-list"), data.outfit);
+        renderFeedback("feedback-box", data.recommendation_id, "outfit-list");
         $("result").classList.remove("hidden");
     } catch (err) {
         console.error(err);
@@ -375,6 +468,7 @@ async function ask() {
         $("ask-weather-line").textContent = t("weather")(data.weather);
         renderOutfitList($("ask-outfit-list"), data.outfit);
         $("ask-explanation").textContent = data.explanation || "";
+        renderFeedback("ask-feedback-box", data.recommendation_id, "ask-outfit-list");
         $("ask-result").classList.remove("hidden");
     } catch (err) {
         console.error(err);

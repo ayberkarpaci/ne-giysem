@@ -30,6 +30,7 @@ add_library(negiysem_core STATIC
     src/wardrobe.cpp
     src/gemini.cpp
     src/env.cpp
+    src/feedback.cpp
 )
 target_include_directories(negiysem_core PUBLIC include)
 target_link_libraries(negiysem_core
@@ -48,6 +49,7 @@ add_executable(negiysem_tests
     tests/test_server.cpp
     tests/test_wardrobe.cpp
     tests/test_gemini.cpp
+    tests/test_feedback.cpp
 )
 target_link_libraries(negiysem_tests PRIVATE nlohmann_json::nlohmann_json)
 target_link_libraries(negiysem_tests PRIVATE negiysem_core Catch2::Catch2WithMain)

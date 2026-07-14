@@ -20,10 +20,12 @@ struct WeatherReport {
 };
 
 // JSON builders, exposed for unit testing. Both return serialized JSON.
+// recommendation_id > 0 is included so the client can send feedback on it.
 std::string outfitToJson(const std::vector<RecommendedItem>& outfit,
                          const WeatherReport& weather,
                          const std::string& mood_slug,
-                         const std::string& source = "catalog");
+                         const std::string& source = "catalog",
+                         int recommendation_id = 0);
 std::string moodsToJson(Database& db, const std::string& lang);
 
 // HTTP server: serves the static web UI plus a small JSON API.

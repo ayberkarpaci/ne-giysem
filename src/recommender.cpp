@@ -7,6 +7,7 @@
 #include <stdexcept>
 
 #include "database.h"
+#include "feedback.h"
 
 namespace negiysem {
 
@@ -31,6 +32,10 @@ double rainAdjustment(bool is_raining, bool is_waterproof) {
     }
     // A raincoat or umbrella is an odd pick in dry weather.
     return is_waterproof ? -0.2 : 0.0;
+}
+
+double feedbackAdjustment(double average_rating) {
+    return 0.3 * (std::clamp(average_rating, 1.0, 5.0) - 3.0) / 2.0;
 }
 
 double preferenceAdjustment(const std::vector<std::string>& item_values,
@@ -205,10 +210,28 @@ std::vector<RecommendedItem> pickOutfit(std::map<std::string, RecommendedItem>&&
 
 }  // namespace
 
+namespace {
+
+bool isExcluded(const RecommendationRequest& request, const std::string& item_slug) {
+    return std::find(request.exclude_items.begin(), request.exclude_items.end(),
+                     item_slug) != request.exclude_items.end();
+}
+
+// Adds the learned adjustment from past user ratings, if any.
+void applyFeedback(RecommendedItem& item, const std::map<std::string, double>& ratings) {
+    const auto it = ratings.find(item.item_slug);
+    if (it != ratings.end()) {
+        item.score += feedbackAdjustment(it->second);
+    }
+}
+
+}  // namespace
+
 std::vector<RecommendedItem> Recommender::recommend(const RecommendationRequest& request) const {
     sqlite3* db = db_.handle();
     const auto mood_weights = resolveMoodWeights(db, request);
     const auto affinities = loadAffinities(db);
+    const auto ratings = FeedbackRepository(db_).averageRatings();
 
     sqlite3_stmt* stmt = nullptr;
     if (sqlite3_prepare_v2(db, kItemQuery.c_str(), -1, &stmt, nullptr) != SQLITE_OK) {
@@ -220,6 +243,8 @@ std::vector<RecommendedItem> Recommender::recommend(const RecommendationRequest&
     std::map<std::string, RecommendedItem> best;
     while (sqlite3_step(stmt) == SQLITE_ROW) {
         RecommendedItem item = readScoredItem(stmt, request, affinities, mood_weights);
+        if (isExcluded(request, item.item_slug)) continue;
+        applyFeedback(item, ratings);
         auto it = best.find(item.category_slug);
         if (it == best.end() || item.score > it->second.score) {
             best[item.category_slug] = std::move(item);
@@ -235,6 +260,7 @@ std::vector<RecommendedItem> Recommender::recommendFromWardrobe(
     sqlite3* db = db_.handle();
     const auto mood_weights = resolveMoodWeights(db, request);
     const auto affinities = loadAffinities(db);
+    const auto ratings = FeedbackRepository(db_).averageRatings();
 
     sqlite3_stmt* stmt = nullptr;
     if (sqlite3_prepare_v2(db, kWardrobeQuery.c_str(), -1, &stmt, nullptr) != SQLITE_OK) {
@@ -275,6 +301,8 @@ std::vector<RecommendedItem> Recommender::recommendFromWardrobe(
     std::map<std::string, RecommendedItem> best;
     while (sqlite3_step(stmt) == SQLITE_ROW) {
         RecommendedItem item = readScoredItem(stmt, request, affinities, mood_weights);
+        if (isExcluded(request, item.item_slug)) continue;
+        applyFeedback(item, ratings);
         item.wardrobe_id = sqlite3_column_int(stmt, 8);
         const std::string label = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 9));
         item.photo_path = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 10));

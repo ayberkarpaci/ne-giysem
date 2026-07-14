@@ -391,6 +391,66 @@ main {
     margin-top: 0;
 }
 
+.feedback {
+    margin-top: 0.9rem;
+}
+
+.feedback .note {
+    margin-bottom: 0.35rem;
+}
+
+.stars {
+    display: flex;
+    gap: 0.25rem;
+    margin-bottom: 0.5rem;
+}
+
+.stars button {
+    border: none;
+    background: transparent;
+    color: var(--accent);
+    font-size: 1.5rem;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0.1rem;
+}
+
+.feedback-detail {
+    display: flex;
+    gap: 0.5rem;
+    align-items: flex-start;
+}
+
+.feedback-detail textarea {
+    flex: 1;
+    padding: 0.5rem;
+    border: 1px solid #d5d9e4;
+    border-radius: 0.5rem;
+    font: inherit;
+    resize: vertical;
+    background: #fff;
+    color: var(--text);
+}
+
+.feedback-detail.hidden {
+    display: none;
+}
+
+.send-feedback {
+    border: none;
+    background: var(--accent);
+    color: #fff;
+    font-weight: 600;
+    padding: 0.55rem 1rem;
+    border-radius: 0.6rem;
+    cursor: pointer;
+}
+
+.send-feedback:disabled {
+    opacity: 0.6;
+    cursor: wait;
+}
+
 /* The multi-select color chips need the full row in the attribute grid. */
 #attribute-selects label:has(.attr-chips) {
     grid-column: 1 / -1;

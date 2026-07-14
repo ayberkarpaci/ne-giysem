@@ -39,13 +39,25 @@ ne-giysem <temp_c> <rain 0|1> [mood] [lang]
 ne-giysem serve [port]
 ```
 
-API endpoints: `GET /api/moods?lang=..` and
-`GET /api/recommendation?mood=..&lang=..[&temp=..&rain=0|1]`.
+Main API endpoints (see `include/server.h` for the full list):
+
+- `GET /api/recommendation?mood=..&lang=..` — outfit for the current weather
+- `POST /api/ask` — free-text plan, parsed by Gemini
+- `POST /api/feel` — free-text mood, blended by Gemini
+- `POST /api/feedback` — rate a suggestion 1-5 (+ comment); a poor rating
+  returns an alternative outfit, and ratings feed future scoring
+- `GET /api/location`, `GET /api/geocode?name=..` — detect / correct the city
+- `POST /api/classify-photo` — prefill the add form from a garment photo
+
+Weather overrides on every recommendation call: manual weather
+(`temp` + `rain`), corrected location (`lat` + `lon` + `city`) and/or an hour
+window (`start_hour` + `end_hour`) that averages the hourly forecast.
 
 Moods: `energetic`, `cozy`, `confident`, `relaxed`, `adventurous`.
 Languages: `en`, `tr` (display names come from the `translations` table).
 
-Both weather APIs are free and require no API key.
+The weather, geocoding and geolocation APIs are free and require no API key;
+the Gemini-backed features need `GEMINI_API_KEY` in `.env`.
 
 ## Tests
 
@@ -55,5 +67,8 @@ ctest --test-dir build --output-on-failure
 
 ## Status
 
-Core engine, SQLite catalog, automatic weather lookup and a bilingual (EN/TR)
-web UI are in place. Next up: a mobile app with full i18n.
+Core engine, SQLite catalog (55 garment types incl. jewelry), Gemini photo
+classification with multi-color support, weather with location correction,
+hour windows and manual entry, and a feedback loop that learns from ratings
+are in place — all behind a bilingual (EN/TR) web UI. Next up: a mobile app
+with full i18n.

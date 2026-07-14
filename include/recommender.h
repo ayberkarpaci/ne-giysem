@@ -24,6 +24,9 @@ struct RecommendationRequest {
     std::vector<std::string> colors_avoided;
     std::vector<std::string> patterns_preferred;
     std::vector<std::string> patterns_avoided;
+    // Item type slugs to leave out entirely, e.g. when the user disliked a
+    // suggestion and asked for another one.
+    std::vector<std::string> exclude_items;
 };
 
 struct RecommendedItem {
@@ -54,6 +57,10 @@ double rainAdjustment(bool is_raining, bool is_waterproof);
 double preferenceAdjustment(const std::vector<std::string>& item_values,
                             const std::vector<std::string>& preferred,
                             const std::vector<std::string>& avoided);
+
+// How past user ratings shift an item's score: a 1..5 average maps linearly
+// to -0.3..+0.3 around the neutral rating of 3.
+double feedbackAdjustment(double average_rating);
 
 // Picks the best-scoring item per category. Core categories (top, bottom,
 // footwear) are always present; optional ones (outerwear, accessory) only

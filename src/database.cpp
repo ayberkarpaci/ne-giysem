@@ -84,6 +84,32 @@ CREATE TABLE IF NOT EXISTS wardrobe_item_attributes (
     attribute_value_id INTEGER NOT NULL REFERENCES attribute_values(id),
     PRIMARY KEY (wardrobe_item_id, attribute_value_id)
 );
+
+-- Every outfit we served, with the context it was computed from, so the
+-- user's feedback can point back at it and a retry can rebuild the request.
+CREATE TABLE IF NOT EXISTS recommendations (
+    id            INTEGER PRIMARY KEY,
+    created_at    TEXT NOT NULL DEFAULT (datetime('now')),
+    source        TEXT NOT NULL,       -- 'catalog' | 'wardrobe'
+    mood_slug     TEXT,
+    temperature_c REAL,
+    is_raining    INTEGER NOT NULL DEFAULT 0,
+    lang          TEXT
+);
+
+CREATE TABLE IF NOT EXISTS recommendation_items (
+    recommendation_id INTEGER NOT NULL REFERENCES recommendations(id) ON DELETE CASCADE,
+    item_slug         TEXT NOT NULL    -- catalog type slug of the suggested piece
+);
+
+-- The user's verdict on a served outfit; the recommender learns from it.
+CREATE TABLE IF NOT EXISTS recommendation_feedback (
+    id                INTEGER PRIMARY KEY,
+    recommendation_id INTEGER NOT NULL REFERENCES recommendations(id) ON DELETE CASCADE,
+    rating            INTEGER NOT NULL CHECK (rating BETWEEN 1 AND 5),
+    comment           TEXT,
+    created_at        TEXT NOT NULL DEFAULT (datetime('now'))
+);
 )sql";
 
 }  // namespace
