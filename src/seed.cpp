@@ -13,7 +13,8 @@ INSERT OR IGNORE INTO clothing_categories (id, slug) VALUES
     (2, 'top'),
     (3, 'bottom'),
     (4, 'footwear'),
-    (5, 'accessory');
+    (5, 'accessory'),
+    (6, 'jewelry');
 
 INSERT OR IGNORE INTO clothing_items
     (id, category_id, slug, min_temp_c, max_temp_c, is_waterproof, warmth_level) VALUES
@@ -80,7 +81,14 @@ INSERT OR IGNORE INTO clothing_items
     (46, 5, 'belt',          NULL, NULL, 0, 0),
     (47, 5, 'tie',           NULL, NULL, 0, 0),
     (48, 5, 'backpack',      NULL, NULL, 0, 0),
-    (49, 5, 'handbag',       NULL, NULL, 0, 0);
+    (49, 5, 'handbag',       NULL, NULL, 0, 0),
+    -- jewelry (Swarovski-style categories); weather-neutral
+    (50, 6, 'necklace',      NULL, NULL, 0, 0),
+    (51, 6, 'earrings',      NULL, NULL, 0, 0),
+    (52, 6, 'bracelet',      NULL, NULL, 0, 0),
+    (53, 6, 'ring',          NULL, NULL, 0, 0),
+    (54, 6, 'watch',         NULL, NULL, 0, 0),
+    (55, 6, 'brooch',        NULL, NULL, 0, 0);
 
 INSERT OR IGNORE INTO moods (id, slug) VALUES
     (1, 'energetic'),
@@ -143,7 +151,15 @@ INSERT OR IGNORE INTO item_mood_affinity (item_id, mood_id, weight) VALUES
     (46, 3, 0.4),                           -- belt: confident
     (47, 3, 0.7),                           -- tie: confident
     (48, 5, 0.6), (48, 1, 0.4),             -- backpack: adventurous, energetic
-    (49, 3, 0.5);                           -- handbag: confident
+    (49, 3, 0.5),                           -- handbag: confident
+    -- jewelry: temperature-neutral (0.5 fit), so only pieces whose blended
+    -- mood weight reaches 0.6 clear the optional-category threshold of 0.8
+    (50, 3, 0.6),                           -- necklace: confident
+    (51, 3, 0.4), (51, 1, 0.4),             -- earrings: confident, energetic
+    (52, 4, 0.4),                           -- bracelet: relaxed
+    (53, 3, 0.5),                           -- ring: confident
+    (54, 3, 0.7),                           -- watch: confident
+    (55, 3, 0.4);                           -- brooch: confident
 
 )sql";
 
@@ -156,6 +172,7 @@ INSERT OR IGNORE INTO translations (entity_type, entity_id, lang_code, name) VAL
     ('category', 3, 'en', 'Bottom'),        ('category', 3, 'tr', 'Alt giyim'),
     ('category', 4, 'en', 'Footwear'),      ('category', 4, 'tr', 'Ayakkabı'),
     ('category', 5, 'en', 'Accessory'),     ('category', 5, 'tr', 'Aksesuar'),
+    ('category', 6, 'en', 'Jewelry'),       ('category', 6, 'tr', 'Takı'),
 
     ('item', 1,  'en', 'T-shirt'),          ('item', 1,  'tr', 'Tişört'),
     ('item', 2,  'en', 'Shirt'),            ('item', 2,  'tr', 'Gömlek'),
@@ -206,6 +223,12 @@ INSERT OR IGNORE INTO translations (entity_type, entity_id, lang_code, name) VAL
     ('item', 47, 'en', 'Tie'),              ('item', 47, 'tr', 'Kravat'),
     ('item', 48, 'en', 'Backpack'),         ('item', 48, 'tr', 'Sırt çantası'),
     ('item', 49, 'en', 'Handbag'),          ('item', 49, 'tr', 'El çantası'),
+    ('item', 50, 'en', 'Necklace'),         ('item', 50, 'tr', 'Kolye'),
+    ('item', 51, 'en', 'Earrings'),         ('item', 51, 'tr', 'Küpe'),
+    ('item', 52, 'en', 'Bracelet'),         ('item', 52, 'tr', 'Bilezik'),
+    ('item', 53, 'en', 'Ring'),             ('item', 53, 'tr', 'Yüzük'),
+    ('item', 54, 'en', 'Watch'),            ('item', 54, 'tr', 'Kol saati'),
+    ('item', 55, 'en', 'Brooch'),           ('item', 55, 'tr', 'Broş'),
 
     ('mood', 1, 'en', 'Energetic'),         ('mood', 1, 'tr', 'Enerjik'),
     ('mood', 2, 'en', 'Cozy'),              ('mood', 2, 'tr', 'Keyifli'),
@@ -219,7 +242,8 @@ INSERT OR IGNORE INTO attributes (id, slug) VALUES
     (3, 'collar'),
     (4, 'fit'),
     (5, 'pattern'),
-    (6, 'sleeve');
+    (6, 'sleeve'),
+    (7, 'metal');
 
 INSERT OR IGNORE INTO category_attributes (category_id, attribute_id) VALUES
     -- color applies everywhere
@@ -232,7 +256,9 @@ INSERT OR IGNORE INTO category_attributes (category_id, attribute_id) VALUES
     -- pattern for everything except footwear
     (1, 5), (2, 5), (3, 5), (5, 5),
     -- sleeve only for tops
-    (2, 6);
+    (2, 6),
+    -- jewelry gets color (stones, straps) and metal
+    (6, 1), (6, 7);
 
 INSERT OR IGNORE INTO attribute_values (id, attribute_id, slug) VALUES
     (1,  1, 'black'),   (2,  1, 'white'),  (3,  1, 'gray'),
@@ -247,7 +273,9 @@ INSERT OR IGNORE INTO attribute_values (id, attribute_id, slug) VALUES
     (29, 5, 'floral'),    (30, 5, 'polka-dot'),  (31, 5, 'graphic'),
     (32, 5, 'camouflage'),
     (33, 6, 'long-sleeve'), (34, 6, 'short-sleeve'), (35, 6, 'sleeveless'),
-    (36, 2, 'silk'),      (37, 2, 'corduroy');
+    (36, 2, 'silk'),      (37, 2, 'corduroy'),
+    (38, 7, 'gold'),      (39, 7, 'silver'),     (40, 7, 'rose-gold'),
+    (41, 7, 'steel');
 
 INSERT OR IGNORE INTO translations (entity_type, entity_id, lang_code, name) VALUES
     ('attribute', 1, 'en', 'Color'),        ('attribute', 1, 'tr', 'Renk'),
@@ -256,6 +284,7 @@ INSERT OR IGNORE INTO translations (entity_type, entity_id, lang_code, name) VAL
     ('attribute', 4, 'en', 'Fit'),          ('attribute', 4, 'tr', 'Kesim'),
     ('attribute', 5, 'en', 'Pattern'),      ('attribute', 5, 'tr', 'Desen'),
     ('attribute', 6, 'en', 'Sleeve'),       ('attribute', 6, 'tr', 'Kol'),
+    ('attribute', 7, 'en', 'Metal'),        ('attribute', 7, 'tr', 'Metal'),
 
     ('attribute_value', 1,  'en', 'Black'),      ('attribute_value', 1,  'tr', 'Siyah'),
     ('attribute_value', 2,  'en', 'White'),      ('attribute_value', 2,  'tr', 'Beyaz'),
@@ -293,7 +322,11 @@ INSERT OR IGNORE INTO translations (entity_type, entity_id, lang_code, name) VAL
     ('attribute_value', 34, 'en', 'Short sleeve'), ('attribute_value', 34, 'tr', 'Kısa kollu'),
     ('attribute_value', 35, 'en', 'Sleeveless'),   ('attribute_value', 35, 'tr', 'Kolsuz'),
     ('attribute_value', 36, 'en', 'Silk'),       ('attribute_value', 36, 'tr', 'İpek'),
-    ('attribute_value', 37, 'en', 'Corduroy'),   ('attribute_value', 37, 'tr', 'Fitilli kadife');
+    ('attribute_value', 37, 'en', 'Corduroy'),   ('attribute_value', 37, 'tr', 'Fitilli kadife'),
+    ('attribute_value', 38, 'en', 'Gold'),       ('attribute_value', 38, 'tr', 'Altın'),
+    ('attribute_value', 39, 'en', 'Silver'),     ('attribute_value', 39, 'tr', 'Gümüş'),
+    ('attribute_value', 40, 'en', 'Rose gold'),  ('attribute_value', 40, 'tr', 'Roze altın'),
+    ('attribute_value', 41, 'en', 'Steel'),      ('attribute_value', 41, 'tr', 'Çelik');
 )sql";
 
 }  // namespace

@@ -77,6 +77,7 @@ const CATEGORY_EMOJI = {
     bottom: "👖",
     footwear: "👟",
     accessory: "🧣",
+    jewelry: "💍",
 };
 
 let lang = localStorage.getItem("lang") || "en";
