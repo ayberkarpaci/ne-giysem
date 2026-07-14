@@ -3,6 +3,7 @@
 #include <sqlite3.h>
 
 #include <algorithm>
+#include <cstdlib>
 #include <map>
 #include <stdexcept>
 
@@ -36,6 +37,11 @@ double rainAdjustment(bool is_raining, bool is_waterproof) {
 
 double feedbackAdjustment(double average_rating) {
     return 0.3 * (std::clamp(average_rating, 1.0, 5.0) - 3.0) / 2.0;
+}
+
+double formalityAdjustment(int item_formality, int target) {
+    if (target < 0) return 0.0;
+    return -0.15 * std::abs(item_formality - std::clamp(target, 0, 5));
 }
 
 double preferenceAdjustment(const std::vector<std::string>& item_values,
@@ -144,7 +150,8 @@ SELECT i.slug,
        i.is_waterproof,
        i.id,
        COALESCE(ti.name, i.slug),
-       COALESCE(tc.name, c.slug)
+       COALESCE(tc.name, c.slug),
+       i.formality
 )sql";
 
 const std::string kItemQuery = std::string(kSharedColumns) + R"sql(
@@ -157,6 +164,7 @@ LEFT JOIN translations tc
 WHERE (?2 = '' OR i.gender = 'unisex' OR i.gender = ?2);
 )sql";
 
+// Appends w.id, label, photo_path as columns 9-11 after the shared ones.
 const std::string kWardrobeQuery = std::string(kSharedColumns) + R"sql(
      , w.id, COALESCE(w.label, ''), COALESCE(w.photo_path, '')
 FROM wardrobe_items w
@@ -191,9 +199,11 @@ RecommendedItem readScoredItem(sqlite3_stmt* stmt,
     item.category_slug = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1));
     item.item_name = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 6));
     item.category_name = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 7));
+    item.formality = sqlite3_column_int(stmt, 8);
     item.score = scoreItem(temperatureFit(request.temperature_c, min_c, max_c),
                            mood_weight,
-                           rainAdjustment(request.is_raining, waterproof));
+                           rainAdjustment(request.is_raining, waterproof)) +
+                 formalityAdjustment(item.formality, request.formality_target);
     return item;
 }
 
@@ -336,9 +346,9 @@ OutfitCandidates Recommender::candidatesFromWardrobe(const RecommendationRequest
         RecommendedItem item = readScoredItem(stmt, request, affinities, mood_weights);
         if (isExcluded(request, item.item_slug)) continue;
         applyFeedback(item, ratings);
-        item.wardrobe_id = sqlite3_column_int(stmt, 8);
-        const std::string label = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 9));
-        item.photo_path = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 10));
+        item.wardrobe_id = sqlite3_column_int(stmt, 9);
+        const std::string label = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 10));
+        item.photo_path = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 11));
         if (!label.empty()) {
             item.item_name = label;
         }

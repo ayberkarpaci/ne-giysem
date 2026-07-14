@@ -213,6 +213,34 @@ TEST_CASE("gender narrows the catalog to unisex plus that gender") {
     CHECK(any_footwear->item_slug == "heels");
 }
 
+TEST_CASE("formalityAdjustment") {
+    CHECK_THAT(negiysem::formalityAdjustment(3, -1), WithinAbs(0.0, 1e-9));  // no target
+    CHECK_THAT(negiysem::formalityAdjustment(3, 3), WithinAbs(0.0, 1e-9));
+    CHECK_THAT(negiysem::formalityAdjustment(0, 4), WithinAbs(-0.6, 1e-9));
+    CHECK_THAT(negiysem::formalityAdjustment(5, 3), WithinAbs(-0.3, 1e-9));
+}
+
+TEST_CASE("occasion formality steers the pick") {
+    Database db = makeSeededDb();
+    RecommendationRequest request;
+    request.temperature_c = 18.0;
+    request.gender = "male";  // keeps footwear ties deterministic
+
+    // A sporty occasion favors formality-0 shoes over sneakers (1).
+    request.formality_target = 0;
+    auto outfit = Recommender(db).recommend(request);
+    const auto* sporty = findCategory(outfit, "footwear");
+    REQUIRE(sporty != nullptr);
+    CHECK(sporty->item_slug == "running-shoes");
+
+    // A special occasion favors formality-4 classic shoes.
+    request.formality_target = 4;
+    outfit = Recommender(db).recommend(request);
+    const auto* formal = findCategory(outfit, "footwear");
+    REQUIRE(formal != nullptr);
+    CHECK(formal->item_slug == "classic-shoes");
+}
+
 TEST_CASE("unknown mood throws") {
     Database db = makeSeededDb();
     RecommendationRequest request;

@@ -24,7 +24,8 @@ CREATE TABLE IF NOT EXISTS clothing_items (
     max_temp_c    REAL,
     is_waterproof INTEGER NOT NULL DEFAULT 0,
     warmth_level  INTEGER NOT NULL DEFAULT 0,  -- 0 (none) .. 5 (very warm)
-    gender        TEXT NOT NULL DEFAULT 'unisex'  -- 'unisex' | 'male' | 'female'
+    gender        TEXT NOT NULL DEFAULT 'unisex',  -- 'unisex' | 'male' | 'female'
+    formality     INTEGER NOT NULL DEFAULT 2  -- 0 (sporty) .. 5 (formal)
 );
 
 CREATE TABLE IF NOT EXISTS moods (
@@ -149,6 +150,11 @@ void Database::initSchema() {
     try {
         execute("ALTER TABLE clothing_items ADD COLUMN gender TEXT NOT NULL "
                 "DEFAULT 'unisex';");
+    } catch (const std::runtime_error&) {
+    }
+    try {
+        execute("ALTER TABLE clothing_items ADD COLUMN formality INTEGER NOT NULL "
+                "DEFAULT 2;");
     } catch (const std::runtime_error&) {
     }
 }

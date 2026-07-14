@@ -112,6 +112,17 @@ std::string sanitizeGender(const std::string& gender) {
     return (gender == "male" || gender == "female") ? gender : "";
 }
 
+// Maps a parsed occasion onto the 0 (sporty) .. 5 (formal) formality scale;
+// -1 (no occasion) leaves formality out of the scoring.
+int occasionFormality(const std::string& occasion) {
+    if (occasion == "sport") return 0;
+    if (occasion == "casual") return 1;
+    if (occasion == "work") return 3;
+    if (occasion == "date") return 3;
+    if (occasion == "special") return 4;
+    return -1;
+}
+
 // Decides the weather for a recommendation: manual entry wins, then the
 // user's corrected location, then IP geolocation; with an hour window the
 // hourly forecast is averaged, otherwise current/daily conditions are used.
@@ -535,6 +546,7 @@ bool Server::run(int port) {
             request.mood_slug = parsed.mood_slug.empty() ? "relaxed" : parsed.mood_slug;
             request.lang = lang;
             request.gender = sanitizeGender(body.value("gender", ""));
+            request.formality_target = occasionFormality(parsed.occasion);
             request.colors_preferred = parsed.colors_preferred;
             request.colors_avoided = parsed.colors_avoided;
             request.patterns_preferred = parsed.patterns_preferred;

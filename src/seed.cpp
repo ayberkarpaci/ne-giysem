@@ -387,6 +387,27 @@ UPDATE clothing_items SET gender = 'female'
  WHERE slug IN ('dress', 'jumpsuit', 'tunic', 'crop-top', 'bodysuit',
                 'camisole', 'mules');
 
+-- Formality scale: 0 sporty .. 5 formal (default 2). Idempotent UPDATEs so
+-- existing databases pick the values up too.
+UPDATE clothing_items SET formality = 0
+ WHERE slug IN ('sweatpants', 'jersey', 'leggings', 'tank-top', 'joggers',
+                'running-shoes', 'bucket-hat');
+UPDATE clothing_items SET formality = 1
+ WHERE slug IN ('t-shirt', 'hoodie', 'shorts', 'sandals', 'sneakers',
+                'puffer-jacket', 'beanie', 'cap', 'cargo-pants',
+                'bomber-jacket', 'parka', 'windbreaker', 'puffer-vest',
+                'sweatshirt', 'flannel-shirt', 'camisole', 'overshirt',
+                'poncho', 'espadrilles', 'backpack', 'crossbody-bag',
+                'crop-top');
+UPDATE clothing_items SET formality = 3
+ WHERE slug IN ('shirt', 'chinos', 'loafers', 'blouse', 'skirt', 'belt',
+                'handbag', 'necklace', 'earrings', 'ring', 'watch', 'dress');
+UPDATE clothing_items SET formality = 4
+ WHERE slug IN ('trench-coat', 'blazer', 'wool-coat', 'overcoat',
+                'dress-pants', 'heels', 'classic-shoes', 'brooch');
+UPDATE clothing_items SET formality = 5
+ WHERE slug IN ('tie');
+
 INSERT OR IGNORE INTO item_mood_affinity (item_id, mood_id, weight) VALUES
     (56, 3, 0.8), (56, 1, 0.4),             -- dress: confident, energetic
     (57, 3, 0.5), (57, 5, 0.4),             -- jumpsuit: confident, adventurous

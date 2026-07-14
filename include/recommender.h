@@ -32,6 +32,9 @@ struct RecommendationRequest {
     // gender; empty shows everything. The user's own wardrobe is never
     // filtered — they own those clothes.
     std::string gender;
+    // Target formality 0 (sporty) .. 5 (formal), usually derived from the
+    // parsed occasion; -1 means no occasion, so formality is not scored.
+    int formality_target = -1;
 };
 
 struct RecommendedItem {
@@ -46,6 +49,7 @@ struct RecommendedItem {
     // Attribute value slugs (colors, pattern, fit, ...) of a wardrobe item,
     // so a stylist pass can judge how well pieces go together.
     std::vector<std::string> value_slugs;
+    int formality = 2;  // 0 (sporty) .. 5 (formal), from the catalog type
 };
 
 // Scored items per category slug, each list sorted best first.
@@ -72,6 +76,10 @@ double preferenceAdjustment(const std::vector<std::string>& item_values,
 // How past user ratings shift an item's score: a 1..5 average maps linearly
 // to -0.3..+0.3 around the neutral rating of 3.
 double feedbackAdjustment(double average_rating);
+
+// Penalty for missing the occasion's formality: 0 without a target (< 0),
+// otherwise -0.15 per level of distance from it.
+double formalityAdjustment(int item_formality, int target);
 
 // Picks the best-scoring item per category. Core categories (top, bottom,
 // footwear) are always present; optional ones (outerwear, accessory) only

@@ -123,7 +123,8 @@ std::string buildStylistPrompt(const std::string& context,
     for (const auto& [category, items] : candidates) {
         prompt << "- " << category << ":";
         for (size_t i = 0; i < items.size(); ++i) {
-            prompt << " " << (i + 1) << ") " << items[i].item_slug;
+            prompt << " " << (i + 1) << ") " << items[i].item_slug
+                   << " [formality " << items[i].formality << "/5]";
             if (!items[i].value_slugs.empty()) {
                 prompt << " (";
                 for (size_t v = 0; v < items[i].value_slugs.size(); ++v) {

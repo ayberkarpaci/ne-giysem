@@ -139,8 +139,8 @@ TEST_CASE("stylist prompt and picks") {
         const auto prompt =
             negiysem::buildStylistPrompt("dinner date", candidates, {18.0, false}, "tr");
         CHECK_THAT(prompt, ContainsSubstring("dinner date"));
-        CHECK_THAT(prompt, ContainsSubstring("1) t-shirt (gray, solid)"));
-        CHECK_THAT(prompt, ContainsSubstring("2) shirt (white)"));
+        CHECK_THAT(prompt, ContainsSubstring("1) t-shirt [formality 2/5] (gray, solid)"));
+        CHECK_THAT(prompt, ContainsSubstring("2) shirt [formality 2/5] (white)"));
         CHECK_THAT(prompt, ContainsSubstring("1) sneakers"));
         CHECK_THAT(prompt, ContainsSubstring("formality"));
         CHECK_THAT(prompt, ContainsSubstring("'tr'"));
