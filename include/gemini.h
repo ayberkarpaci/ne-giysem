@@ -42,9 +42,18 @@ std::string buildParsePrompt(const std::string& user_text, const std::string& to
 std::string buildMoodPrompt(const std::string& user_text);
 std::string buildClassifyPrompt(const std::vector<std::string>& type_slugs,
                                 const AttributeVocabulary& attribute_values);
+std::string buildStylistPrompt(const std::string& context,
+                               const OutfitCandidates& candidates,
+                               const Weather& weather);
 std::string extractGeminiText(const std::string& api_response_json);
 ParsedRequest parseParsedRequestJson(const std::string& text);
 MoodWeights parseMoodWeightsJson(const std::string& text);
+// The stylist's numbered picks mapped back onto the candidates: at most one
+// item per category, core categories (top, bottom, footwear) backfilled
+// with the best candidate when the model skips them. Throws when the
+// response is not parseable at all.
+std::vector<RecommendedItem> parseStylistPicksJson(const std::string& text,
+                                                   const OutfitCandidates& candidates);
 // Throws when no valid garment type is found; invalid values are dropped.
 ClassifiedGarment parseClassifiedGarmentJson(const std::string& text,
                                              const std::vector<std::string>& type_slugs,
@@ -71,6 +80,13 @@ public:
                                       const std::string& mime_type,
                                       const std::vector<std::string>& type_slugs,
                                       const AttributeVocabulary& attribute_values) const;
+
+    // Picks the most coherent outfit from scored candidates, applying
+    // fashion rules (color harmony, consistent formality) in the prompt.
+    // Throws on API or parse failure — callers fall back to the top picks.
+    std::vector<RecommendedItem> styleOutfit(const std::string& context,
+                                             const OutfitCandidates& candidates,
+                                             const Weather& weather) const;
 
     // One friendly sentence (in `lang`) explaining the chosen outfit.
     std::string explainOutfit(const std::string& user_text,

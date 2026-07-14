@@ -228,9 +228,40 @@ void applyFeedback(RecommendedItem& item, const std::map<std::string, double>& r
     }
 }
 
+// Keeps the per-category list sorted best first and capped at `limit`.
+// Ties keep insertion (catalog) order, matching the old single-best pick.
+void insertCandidate(OutfitCandidates& by_category, RecommendedItem&& item, int limit) {
+    auto& list = by_category[item.category_slug];
+    list.push_back(std::move(item));
+    std::stable_sort(list.begin(), list.end(), [](const auto& a, const auto& b) {
+        return a.score > b.score;
+    });
+    if (static_cast<int>(list.size()) > limit) list.resize(limit);
+}
+
+// The classic outfit: the best candidate of every category, thresholded.
+std::vector<RecommendedItem> bestPerCategory(OutfitCandidates&& candidates,
+                                             double optional_threshold) {
+    std::map<std::string, RecommendedItem> best;
+    for (auto& [category, list] : candidates) {
+        best[category] = std::move(list.front());
+    }
+    return pickOutfit(std::move(best), optional_threshold);
+}
+
 }  // namespace
 
 std::vector<RecommendedItem> Recommender::recommend(const RecommendationRequest& request) const {
+    return bestPerCategory(candidates(request, 1), kOptionalCategoryThreshold);
+}
+
+std::vector<RecommendedItem> Recommender::recommendFromWardrobe(
+    const RecommendationRequest& request) const {
+    return bestPerCategory(candidatesFromWardrobe(request, 1), kOptionalCategoryThreshold);
+}
+
+OutfitCandidates Recommender::candidates(const RecommendationRequest& request,
+                                         int limit) const {
     sqlite3* db = db_.handle();
     const auto mood_weights = resolveMoodWeights(db, request);
     const auto affinities = loadAffinities(db);
@@ -243,24 +274,19 @@ std::vector<RecommendedItem> Recommender::recommend(const RecommendationRequest&
     sqlite3_bind_text(stmt, 1, request.lang.c_str(), -1, SQLITE_TRANSIENT);
     sqlite3_bind_text(stmt, 2, request.gender.c_str(), -1, SQLITE_TRANSIENT);
 
-    // Best-scoring item per category.
-    std::map<std::string, RecommendedItem> best;
+    OutfitCandidates by_category;
     while (sqlite3_step(stmt) == SQLITE_ROW) {
         RecommendedItem item = readScoredItem(stmt, request, affinities, mood_weights);
         if (isExcluded(request, item.item_slug)) continue;
         applyFeedback(item, ratings);
-        auto it = best.find(item.category_slug);
-        if (it == best.end() || item.score > it->second.score) {
-            best[item.category_slug] = std::move(item);
-        }
+        insertCandidate(by_category, std::move(item), limit);
     }
     sqlite3_finalize(stmt);
-
-    return pickOutfit(std::move(best), kOptionalCategoryThreshold);
+    return by_category;
 }
 
-std::vector<RecommendedItem> Recommender::recommendFromWardrobe(
-    const RecommendationRequest& request) const {
+OutfitCandidates Recommender::candidatesFromWardrobe(const RecommendationRequest& request,
+                                                     int limit) const {
     sqlite3* db = db_.handle();
     const auto mood_weights = resolveMoodWeights(db, request);
     const auto affinities = loadAffinities(db);
@@ -272,21 +298,18 @@ std::vector<RecommendedItem> Recommender::recommendFromWardrobe(
     }
     sqlite3_bind_text(stmt, 1, request.lang.c_str(), -1, SQLITE_TRANSIENT);
 
-    // Colors and patterns per wardrobe item, for the preference adjustments.
+    // All attribute values per wardrobe item: colors and patterns feed the
+    // preference adjustments, the full list describes the piece to a stylist.
     std::map<int, std::vector<std::string>> colors;
     std::map<int, std::vector<std::string>> patterns;
-    const bool wants_colors =
-        !request.colors_preferred.empty() || !request.colors_avoided.empty();
-    const bool wants_patterns =
-        !request.patterns_preferred.empty() || !request.patterns_avoided.empty();
-    if (wants_colors || wants_patterns) {
+    std::map<int, std::vector<std::string>> all_values;
+    {
         sqlite3_stmt* attr_stmt = nullptr;
         constexpr const char* kAttrQuery = R"sql(
             SELECT wa.wardrobe_item_id, a.slug, v.slug
             FROM wardrobe_item_attributes wa
             JOIN attribute_values v ON v.id = wa.attribute_value_id
-            JOIN attributes a ON a.id = v.attribute_id
-            WHERE a.slug IN ('color', 'pattern');
+            JOIN attributes a ON a.id = v.attribute_id;
         )sql";
         if (sqlite3_prepare_v2(db, kAttrQuery, -1, &attr_stmt, nullptr) != SQLITE_OK) {
             sqlite3_finalize(stmt);
@@ -294,15 +317,18 @@ std::vector<RecommendedItem> Recommender::recommendFromWardrobe(
         }
         while (sqlite3_step(attr_stmt) == SQLITE_ROW) {
             const int wardrobe_id = sqlite3_column_int(attr_stmt, 0);
-            const std::string attr = reinterpret_cast<const char*>(sqlite3_column_text(attr_stmt, 1));
-            auto& target = attr == "color" ? colors : patterns;
-            target[wardrobe_id].emplace_back(
-                reinterpret_cast<const char*>(sqlite3_column_text(attr_stmt, 2)));
+            const std::string attr =
+                reinterpret_cast<const char*>(sqlite3_column_text(attr_stmt, 1));
+            const std::string value =
+                reinterpret_cast<const char*>(sqlite3_column_text(attr_stmt, 2));
+            if (attr == "color") colors[wardrobe_id].push_back(value);
+            if (attr == "pattern") patterns[wardrobe_id].push_back(value);
+            all_values[wardrobe_id].push_back(value);
         }
         sqlite3_finalize(attr_stmt);
     }
 
-    std::map<std::string, RecommendedItem> best;
+    OutfitCandidates by_category;
     while (sqlite3_step(stmt) == SQLITE_ROW) {
         RecommendedItem item = readScoredItem(stmt, request, affinities, mood_weights);
         if (isExcluded(request, item.item_slug)) continue;
@@ -312,6 +338,10 @@ std::vector<RecommendedItem> Recommender::recommendFromWardrobe(
         item.photo_path = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 10));
         if (!label.empty()) {
             item.item_name = label;
+        }
+        const auto values_it = all_values.find(item.wardrobe_id);
+        if (values_it != all_values.end()) {
+            item.value_slugs = values_it->second;
         }
         const auto colors_it = colors.find(item.wardrobe_id);
         if (colors_it != colors.end()) {
@@ -323,14 +353,10 @@ std::vector<RecommendedItem> Recommender::recommendFromWardrobe(
             item.score += preferenceAdjustment(patterns_it->second, request.patterns_preferred,
                                                request.patterns_avoided);
         }
-        auto it = best.find(item.category_slug);
-        if (it == best.end() || item.score > it->second.score) {
-            best[item.category_slug] = std::move(item);
-        }
+        insertCandidate(by_category, std::move(item), limit);
     }
     sqlite3_finalize(stmt);
-
-    return pickOutfit(std::move(best), kOptionalCategoryThreshold);
+    return by_category;
 }
 
 }  // namespace negiysem

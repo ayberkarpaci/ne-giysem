@@ -105,6 +105,47 @@ std::string buildClassifyPrompt(const std::vector<std::string>& type_slugs,
     return prompt.str();
 }
 
+std::string buildStylistPrompt(const std::string& context,
+                               const OutfitCandidates& candidates,
+                               const Weather& weather) {
+    std::ostringstream prompt;
+    prompt << "You are a fashion stylist assembling ONE coherent outfit.\n"
+           << "Situation: " << context << "\n"
+           << "Weather: " << weather.temperature_c << " C, "
+           << (weather.is_raining ? "wet" : "dry") << ".\n"
+           << "Candidates by category, already sorted by weather/mood fit "
+              "(known attributes in parentheses):\n";
+    for (const auto& [category, items] : candidates) {
+        prompt << "- " << category << ":";
+        for (size_t i = 0; i < items.size(); ++i) {
+            prompt << " " << (i + 1) << ") " << items[i].item_slug;
+            if (!items[i].value_slugs.empty()) {
+                prompt << " (";
+                for (size_t v = 0; v < items[i].value_slugs.size(); ++v) {
+                    if (v > 0) prompt << ", ";
+                    prompt << items[i].value_slugs[v];
+                }
+                prompt << ")";
+            }
+        }
+        prompt << "\n";
+    }
+    prompt << "Rules:\n"
+           << "- Pick at most one item per category, by its number.\n"
+           << "- Always pick a top, a bottom and footwear when offered.\n"
+           << "- Add outerwear, accessory or jewelry only when it genuinely "
+              "completes the look for this weather and situation.\n"
+           << "- Keep formality consistent across pieces (no sweatpants with "
+              "a blazer, no heels with a hoodie).\n"
+           << "- Coordinate colors: neutrals (black, white, gray, navy, "
+              "beige, brown) go with anything; keep it to about three color "
+              "families; avoid clashing saturated colors together.\n"
+           << "- At most one boldly patterned piece per outfit.\n"
+           << "Reply with ONLY a JSON object, no markdown, matching exactly:\n"
+           << "{\"picks\": {\"<category>\": <number>, ...}}";
+    return prompt.str();
+}
+
 std::string buildMoodPrompt(const std::string& user_text) {
     std::ostringstream prompt;
     prompt << "The user was asked how they feel today and answered (any language):\n\""
@@ -172,6 +213,37 @@ ParsedRequest parseParsedRequestJson(const std::string& text) {
     readSlugs("patterns_preferred", kPatterns, parsed.patterns_preferred);
     readSlugs("patterns_avoided", kPatterns, parsed.patterns_avoided);
     return parsed;
+}
+
+std::vector<RecommendedItem> parseStylistPicksJson(const std::string& text,
+                                                   const OutfitCandidates& candidates) {
+    const json j = json::parse(stripCodeFences(text), nullptr, /*allow_exceptions=*/false);
+    if (j.is_discarded() || !j.is_object() || !j.contains("picks") ||
+        !j["picks"].is_object()) {
+        throw std::runtime_error("could not parse stylist picks: " + text);
+    }
+    std::vector<RecommendedItem> outfit;
+    std::vector<std::string> picked_categories;
+    for (const auto& [category, number] : j["picks"].items()) {
+        const auto candidates_it = candidates.find(category);
+        if (candidates_it == candidates.end() || !number.is_number_integer()) continue;
+        const int index = number.get<int>();
+        if (index < 1 || index > static_cast<int>(candidates_it->second.size())) continue;
+        if (contains(picked_categories, category)) continue;
+        outfit.push_back(candidates_it->second[index - 1]);
+        picked_categories.push_back(category);
+    }
+    // The model must not silently drop a core category it was offered.
+    for (const char* core : {"top", "bottom", "footwear"}) {
+        const auto candidates_it = candidates.find(core);
+        if (candidates_it != candidates.end() && !contains(picked_categories, core)) {
+            outfit.push_back(candidates_it->second.front());
+        }
+    }
+    std::sort(outfit.begin(), outfit.end(), [](const auto& a, const auto& b) {
+        return a.score > b.score;
+    });
+    return outfit;
 }
 
 MoodWeights parseMoodWeightsJson(const std::string& text) {
@@ -291,6 +363,14 @@ ParsedRequest GeminiClient::parseUserRequest(const std::string& user_text) const
 
 MoodWeights GeminiClient::analyzeMood(const std::string& user_text) const {
     return parseMoodWeightsJson(generate(buildMoodPrompt(user_text), /*json_response=*/true));
+}
+
+std::vector<RecommendedItem> GeminiClient::styleOutfit(const std::string& context,
+                                                       const OutfitCandidates& candidates,
+                                                       const Weather& weather) const {
+    return parseStylistPicksJson(
+        generate(buildStylistPrompt(context, candidates, weather), /*json_response=*/true),
+        candidates);
 }
 
 std::string GeminiClient::explainOutfit(const std::string& user_text,

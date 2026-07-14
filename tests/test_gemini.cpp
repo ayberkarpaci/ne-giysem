@@ -1,6 +1,8 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
 
+#include <algorithm>
+
 #include "gemini.h"
 #include "weather.h"
 
@@ -101,6 +103,79 @@ TEST_CASE("garment classification") {
         const auto garment = negiysem::parseClassifiedGarmentJson(
             "```json\n{\"type\":\"t-shirt\"}\n```", types, vocabulary);
         CHECK(garment.type_slug == "t-shirt");
+    }
+}
+
+namespace {
+
+negiysem::RecommendedItem candidate(const std::string& slug, const std::string& category,
+                                    double score,
+                                    std::vector<std::string> values = {}) {
+    negiysem::RecommendedItem item;
+    item.item_slug = slug;
+    item.item_name = slug;
+    item.category_slug = category;
+    item.score = score;
+    item.value_slugs = std::move(values);
+    return item;
+}
+
+negiysem::OutfitCandidates stylistCandidates() {
+    return {
+        {"top", {candidate("t-shirt", "top", 1.6, {"gray", "solid"}),
+                 candidate("shirt", "top", 1.5, {"white"})}},
+        {"bottom", {candidate("jeans", "bottom", 1.2, {"navy"})}},
+        {"footwear", {candidate("sneakers", "footwear", 1.0)}},
+        {"accessory", {candidate("cap", "accessory", 0.9)}},
+    };
+}
+
+}  // namespace
+
+TEST_CASE("stylist prompt and picks") {
+    const auto candidates = stylistCandidates();
+
+    SECTION("buildStylistPrompt numbers candidates and includes attributes") {
+        const auto prompt =
+            negiysem::buildStylistPrompt("dinner date", candidates, {18.0, false});
+        CHECK_THAT(prompt, ContainsSubstring("dinner date"));
+        CHECK_THAT(prompt, ContainsSubstring("1) t-shirt (gray, solid)"));
+        CHECK_THAT(prompt, ContainsSubstring("2) shirt (white)"));
+        CHECK_THAT(prompt, ContainsSubstring("1) sneakers"));
+        CHECK_THAT(prompt, ContainsSubstring("formality"));
+    }
+    SECTION("valid picks map back to the items") {
+        const auto outfit = negiysem::parseStylistPicksJson(
+            R"({"picks":{"top":2,"bottom":1,"footwear":1}})", candidates);
+        REQUIRE(outfit.size() == 3);
+        CHECK(outfit[0].item_slug == "shirt");  // sorted by score
+        CHECK(outfit[1].item_slug == "jeans");
+        CHECK(outfit[2].item_slug == "sneakers");
+    }
+    SECTION("skipped optional categories stay out") {
+        const auto outfit = negiysem::parseStylistPicksJson(
+            R"({"picks":{"top":1,"bottom":1,"footwear":1}})", candidates);
+        for (const auto& item : outfit) {
+            CHECK(item.category_slug != "accessory");
+        }
+    }
+    SECTION("core categories are backfilled when dropped or out of range") {
+        const auto outfit = negiysem::parseStylistPicksJson(
+            R"({"picks":{"top":99,"accessory":1}})", candidates);
+        std::vector<std::string> categories;
+        for (const auto& item : outfit) categories.push_back(item.category_slug);
+        CHECK(std::count(categories.begin(), categories.end(), "top") == 1);
+        CHECK(std::count(categories.begin(), categories.end(), "bottom") == 1);
+        CHECK(std::count(categories.begin(), categories.end(), "footwear") == 1);
+        // The out-of-range pick fell back to the best top.
+        const auto top = std::find_if(outfit.begin(), outfit.end(), [](const auto& i) {
+            return i.category_slug == "top";
+        });
+        CHECK(top->item_slug == "t-shirt");
+    }
+    SECTION("unparseable responses throw") {
+        CHECK_THROWS(negiysem::parseStylistPicksJson("not json", candidates));
+        CHECK_THROWS(negiysem::parseStylistPicksJson(R"({"no_picks":1})", candidates));
     }
 }
 

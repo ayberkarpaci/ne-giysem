@@ -1,5 +1,6 @@
 #pragma once
 
+#include <map>
 #include <optional>
 #include <string>
 #include <utility>
@@ -42,7 +43,13 @@ struct RecommendedItem {
     // Set only when the item comes from the user's wardrobe.
     int wardrobe_id = 0;
     std::string photo_path;
+    // Attribute value slugs (colors, pattern, fit, ...) of a wardrobe item,
+    // so a stylist pass can judge how well pieces go together.
+    std::vector<std::string> value_slugs;
 };
+
+// Scored items per category slug, each list sorted best first.
+using OutfitCandidates = std::map<std::string, std::vector<RecommendedItem>>;
 
 // Scoring building blocks, exposed for unit testing.
 //
@@ -83,6 +90,12 @@ public:
     // the user's label, falling back to the localized type name.
     std::vector<RecommendedItem> recommendFromWardrobe(
         const RecommendationRequest& request) const;
+
+    // The top `limit` scored items per category, best first, so a stylist
+    // pass can choose the most coherent combination.
+    OutfitCandidates candidates(const RecommendationRequest& request, int limit) const;
+    OutfitCandidates candidatesFromWardrobe(const RecommendationRequest& request,
+                                            int limit) const;
 
 private:
     Database& db_;

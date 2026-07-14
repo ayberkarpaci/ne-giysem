@@ -42,8 +42,10 @@ ne-giysem serve [port]
 Main API endpoints (see `include/server.h` for the full list):
 
 - `GET /api/recommendation?mood=..&lang=..` — outfit for the current weather
-- `POST /api/ask` — free-text plan, parsed by Gemini
-- `POST /api/feel` — free-text mood, blended by Gemini
+- `POST /api/ask` — free-text plan, parsed by Gemini; a stylist pass picks
+  the most coherent combination (color harmony, consistent formality) from
+  the top candidates per category
+- `POST /api/feel` — free-text mood, blended by Gemini (same stylist pass)
 - `POST /api/feedback` — rate a suggestion 1-5 (+ comment); a poor rating
   returns an alternative outfit, and ratings feed future scoring
 - `GET /api/location`, `GET /api/geocode?name=..` — detect / correct the city
