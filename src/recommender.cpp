@@ -198,10 +198,13 @@ RecommendedItem readScoredItem(sqlite3_stmt* stmt,
 }
 
 // Applies the per-category selection and ordering rules to scored items.
+// One-piece garments (dress, jumpsuit) replace top and bottom, which this
+// rule-based picker cannot express, so it leaves them to the stylist pass.
 std::vector<RecommendedItem> pickOutfit(std::map<std::string, RecommendedItem>&& best,
                                         double optional_threshold) {
     std::vector<RecommendedItem> outfit;
     for (auto& [category, item] : best) {
+        if (category == "one-piece") continue;
         if (isCoreCategory(category) || item.score >= optional_threshold) {
             outfit.push_back(std::move(item));
         }

@@ -99,9 +99,11 @@ std::string buildClassifyPrompt(const std::vector<std::string>& type_slugs,
     prompt << "Reply with ONLY a JSON object, no markdown, matching exactly:\n"
            << "{\"type\": <garment type>, \"values\": {\"<attribute>\": <value, array of "
               "values, or null>, ...}}\n"
-           << "Pick the closest type. For \"color\" list every clearly visible color "
-              "(up to 3, dominant first). For each other attribute pick one allowed "
-              "value, or null when it is unclear, not visible or not applicable.";
+           << "The type MUST be exactly one slug from the garment types list — never "
+              "invent a new one; when nothing matches perfectly, choose the closest "
+              "type anyway. For \"color\" list every clearly visible color (up to 3, "
+              "dominant first). For each other attribute pick the closest allowed "
+              "value, or null only when it is truly not visible or not applicable.";
     return prompt.str();
 }
 
@@ -134,6 +136,9 @@ std::string buildStylistPrompt(const std::string& context,
     prompt << "Rules:\n"
            << "- Pick at most one item per category, by its number.\n"
            << "- Always pick a top, a bottom and footwear when offered.\n"
+           << "- EXCEPTION: a one-piece (dress, jumpsuit) replaces both top "
+              "and bottom — when you pick from one-piece, pick no top and "
+              "no bottom.\n"
            << "- Add outerwear, accessory or jewelry only when it genuinely "
               "completes the look for this weather and situation.\n"
            << "- Keep formality consistent across pieces (no sweatpants with "
@@ -238,8 +243,13 @@ StyledOutfit parseStylistPicksJson(const std::string& text,
         outfit.push_back(candidates_it->second[index - 1]);
         picked_categories.push_back(category);
     }
-    // The model must not silently drop a core category it was offered.
+    // The model must not silently drop a core category it was offered —
+    // unless a one-piece was picked, which stands in for top and bottom.
+    const bool has_one_piece = contains(picked_categories, "one-piece");
     for (const char* core : {"top", "bottom", "footwear"}) {
+        if (has_one_piece && (std::string(core) == "top" || std::string(core) == "bottom")) {
+            continue;
+        }
         const auto candidates_it = candidates.find(core);
         if (candidates_it != candidates.end() && !contains(picked_categories, core)) {
             outfit.push_back(candidates_it->second.front());
@@ -326,7 +336,7 @@ std::string postGenerate(const std::string& api_key, const std::string& model,
         cpr::Url{"https://generativelanguage.googleapis.com/v1beta/models/" + model +
                  ":generateContent"},
         cpr::Header{{"Content-Type", "application/json"}, {"x-goog-api-key", api_key}},
-        cpr::Body{body.dump()}, cpr::Timeout{30000});
+        cpr::Body{body.dump()}, cpr::Timeout{60000});
     if (r.status_code == 0) {
         throw std::runtime_error("gemini request failed: " + r.error.message);
     }

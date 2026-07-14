@@ -349,11 +349,217 @@ INSERT OR IGNORE INTO translations (entity_type, entity_id, lang_code, name) VAL
     ('attribute_value', 47, 'en', 'Neutral'),    ('attribute_value', 47, 'tr', 'Nötr');
 )sql";
 
+// Vocabulary expansion so the photo classifier rarely meets a garment or
+// attribute it cannot name. Grounded in e-commerce taxonomies and fashion
+// glossaries (neckline/sleeve/fit/pattern guides). Kept in its own literal
+// because of the MSVC string size cap.
+constexpr const char* kSeedSqlExpansion = R"sql(
+INSERT OR IGNORE INTO clothing_categories (id, slug) VALUES
+    (7, 'one-piece');
+
+INSERT OR IGNORE INTO clothing_items
+    (id, category_id, slug, min_temp_c, max_temp_c, is_waterproof, warmth_level) VALUES
+    -- one-piece garments (replace top + bottom)
+    (56, 7, 'dress',          15,  40, 0, 0),
+    (57, 7, 'jumpsuit',       12,  30, 0, 1),
+    -- more tops
+    (58, 2, 'tunic',          15,  32, 0, 1),
+    (59, 2, 'crop-top',       22,  45, 0, 0),
+    (60, 2, 'bodysuit',       15,  30, 0, 0),
+    (61, 2, 'camisole',       22,  45, 0, 0),
+    (62, 2, 'sweater-vest',    8,  18, 0, 2),
+    -- more bottoms
+    (63, 3, 'joggers',         5,  20, 0, 2),
+    -- more outerwear
+    (64, 1, 'overshirt',      10,  20, 0, 2),
+    (65, 1, 'poncho',          5,  15, 0, 3),
+    -- more footwear
+    (66, 4, 'ankle-boots',    -5,  15, 0, 2),
+    (67, 4, 'running-shoes',   5,  30, 0, 1),
+    (68, 4, 'espadrilles',    20,  40, 0, 0),
+    (69, 4, 'mules',          15,  35, 0, 0),
+    -- more accessories
+    (70, 5, 'tote-bag',      NULL, NULL, 0, 0),
+    (71, 5, 'crossbody-bag', NULL, NULL, 0, 0),
+    (72, 5, 'bucket-hat',     15,  40, 0, 0);
+
+UPDATE clothing_items SET gender = 'female'
+ WHERE slug IN ('dress', 'jumpsuit', 'tunic', 'crop-top', 'bodysuit',
+                'camisole', 'mules');
+
+INSERT OR IGNORE INTO item_mood_affinity (item_id, mood_id, weight) VALUES
+    (56, 3, 0.8), (56, 1, 0.4),             -- dress: confident, energetic
+    (57, 3, 0.5), (57, 5, 0.4),             -- jumpsuit: confident, adventurous
+    (58, 4, 0.6),                           -- tunic: relaxed
+    (59, 1, 0.5), (59, 3, 0.4),             -- crop-top: energetic, confident
+    (60, 3, 0.6),                           -- bodysuit: confident
+    (61, 4, 0.4), (61, 3, 0.3),             -- camisole: relaxed, confident
+    (62, 2, 0.6), (62, 3, 0.4),             -- sweater-vest: cozy, confident
+    (63, 4, 0.7), (63, 1, 0.5),             -- joggers: relaxed, energetic
+    (64, 4, 0.5), (64, 2, 0.4),             -- overshirt: relaxed, cozy
+    (65, 2, 0.4), (65, 5, 0.4),             -- poncho: cozy, adventurous
+    (66, 3, 0.6), (66, 5, 0.5),             -- ankle-boots: confident, adventurous
+    (67, 1, 0.9),                           -- running-shoes: energetic
+    (68, 4, 0.6),                           -- espadrilles: relaxed
+    (69, 3, 0.5), (69, 4, 0.4),             -- mules: confident, relaxed
+    (70, 4, 0.4),                           -- tote-bag: relaxed
+    (71, 1, 0.4), (71, 5, 0.4),             -- crossbody-bag: energetic, adventurous
+    (72, 5, 0.5), (72, 1, 0.4);             -- bucket-hat: adventurous, energetic
+
+INSERT OR IGNORE INTO attributes (id, slug) VALUES
+    (9, 'length');
+
+INSERT OR IGNORE INTO attribute_values (id, attribute_id, slug) VALUES
+    -- necklines & collars (asymmetric, halter, cowl, boat ... )
+    (48, 3, 'mandarin-collar'), (49, 3, 'boat-neck'),      (50, 3, 'square-neck'),
+    (51, 3, 'halter-neck'),     (52, 3, 'off-shoulder'),   (53, 3, 'sweetheart-neck'),
+    (54, 3, 'cowl-neck'),       (55, 3, 'asymmetric-neck'),(56, 3, 'shawl-collar'),
+    (57, 3, 'lapel-collar'),    (58, 3, 'hooded'),         (59, 3, 'collarless'),
+    (60, 3, 'scoop-neck'),      (61, 3, 'strapless'),      (62, 3, 'one-shoulder'),
+    -- fits
+    (63, 4, 'skinny-fit'),      (64, 4, 'straight-fit'),   (65, 4, 'bootcut'),
+    (66, 4, 'tapered-fit'),     (67, 4, 'loose-fit'),      (68, 4, 'oversized'),
+    (69, 4, 'baggy-fit'),       (70, 4, 'relaxed-fit'),
+    -- patterns
+    (71, 5, 'pinstripe'),       (72, 5, 'gingham'),        (73, 5, 'houndstooth'),
+    (74, 5, 'herringbone'),     (75, 5, 'paisley'),        (76, 5, 'animal-print'),
+    (77, 5, 'tie-dye'),         (78, 5, 'color-block'),    (79, 5, 'argyle'),
+    (80, 5, 'embroidered'),     (81, 5, 'sequin'),         (82, 5, 'geometric'),
+    (83, 5, 'abstract'),
+    -- sleeves
+    (84, 6, 'three-quarter-sleeve'), (85, 6, 'cap-sleeve'), (86, 6, 'puff-sleeve'),
+    (87, 6, 'raglan-sleeve'),   (88, 6, 'batwing-sleeve'), (89, 6, 'bell-sleeve'),
+    (90, 6, 'spaghetti-strap'),
+    -- materials
+    (91, 2, 'cashmere'),        (92, 2, 'viscose'),        (93, 2, 'polyester'),
+    (94, 2, 'satin'),           (95, 2, 'velvet'),         (96, 2, 'suede'),
+    (97, 2, 'fleece'),          (98, 2, 'knit'),           (99, 2, 'lace'),
+    (100, 2, 'chiffon'),        (101, 2, 'tweed'),         (102, 2, 'nylon'),
+    (103, 2, 'canvas'),
+    -- colors
+    (104, 1, 'orange'),         (105, 1, 'turquoise'),     (106, 1, 'olive'),
+    (107, 1, 'khaki'),          (108, 1, 'burgundy'),      (109, 1, 'cream'),
+    (110, 1, 'mustard'),        (111, 1, 'teal'),          (112, 1, 'lilac'),
+    (113, 1, 'mint'),           (114, 1, 'coral'),         (115, 1, 'charcoal'),
+    (116, 1, 'multicolor'),
+    -- lengths
+    (117, 9, 'mini'),           (118, 9, 'knee-length'),   (119, 9, 'midi'),
+    (120, 9, 'maxi'),           (121, 9, 'cropped'),       (122, 9, 'ankle-length'),
+    (123, 9, 'long-length');
+
+INSERT OR IGNORE INTO category_attributes (category_id, attribute_id) VALUES
+    -- one-piece garments share the top/bottom detail dimensions
+    (7, 1), (7, 2), (7, 3), (7, 5), (7, 6), (7, 8), (7, 9),
+    -- length also applies to outerwear, tops and bottoms
+    (1, 9), (2, 9), (3, 9);
+
+INSERT OR IGNORE INTO translations (entity_type, entity_id, lang_code, name) VALUES
+    ('category', 7, 'en', 'One-piece'),     ('category', 7, 'tr', 'Tek parça'),
+
+    ('item', 56, 'en', 'Dress'),            ('item', 56, 'tr', 'Elbise'),
+    ('item', 57, 'en', 'Jumpsuit'),         ('item', 57, 'tr', 'Tulum'),
+    ('item', 58, 'en', 'Tunic'),            ('item', 58, 'tr', 'Tunik'),
+    ('item', 59, 'en', 'Crop top'),         ('item', 59, 'tr', 'Crop top'),
+    ('item', 60, 'en', 'Bodysuit'),         ('item', 60, 'tr', 'Body'),
+    ('item', 61, 'en', 'Camisole'),         ('item', 61, 'tr', 'Askılı bluz'),
+    ('item', 62, 'en', 'Sweater vest'),     ('item', 62, 'tr', 'Kazak yelek'),
+    ('item', 63, 'en', 'Joggers'),          ('item', 63, 'tr', 'Jogger eşofman'),
+    ('item', 64, 'en', 'Overshirt'),        ('item', 64, 'tr', 'Gömlek ceket'),
+    ('item', 65, 'en', 'Poncho'),           ('item', 65, 'tr', 'Panço'),
+    ('item', 66, 'en', 'Ankle boots'),      ('item', 66, 'tr', 'Yarım bot'),
+    ('item', 67, 'en', 'Running shoes'),    ('item', 67, 'tr', 'Koşu ayakkabısı'),
+    ('item', 68, 'en', 'Espadrilles'),      ('item', 68, 'tr', 'Espadril'),
+    ('item', 69, 'en', 'Mules'),            ('item', 69, 'tr', 'Sabo'),
+    ('item', 70, 'en', 'Tote bag'),         ('item', 70, 'tr', 'Tote çanta'),
+    ('item', 71, 'en', 'Crossbody bag'),    ('item', 71, 'tr', 'Çapraz çanta'),
+    ('item', 72, 'en', 'Bucket hat'),       ('item', 72, 'tr', 'Balıkçı şapka'),
+
+    ('attribute', 9, 'en', 'Length'),       ('attribute', 9, 'tr', 'Boy'),
+
+    ('attribute_value', 48, 'en', 'Mandarin collar'), ('attribute_value', 48, 'tr', 'Hakim yaka'),
+    ('attribute_value', 49, 'en', 'Boat neck'),       ('attribute_value', 49, 'tr', 'Kayık yaka'),
+    ('attribute_value', 50, 'en', 'Square neck'),     ('attribute_value', 50, 'tr', 'Kare yaka'),
+    ('attribute_value', 51, 'en', 'Halter neck'),     ('attribute_value', 51, 'tr', 'Halter yaka'),
+    ('attribute_value', 52, 'en', 'Off-shoulder'),    ('attribute_value', 52, 'tr', 'Carmen yaka'),
+    ('attribute_value', 53, 'en', 'Sweetheart neck'), ('attribute_value', 53, 'tr', 'Kalp yaka'),
+    ('attribute_value', 54, 'en', 'Cowl neck'),       ('attribute_value', 54, 'tr', 'Degaje yaka'),
+    ('attribute_value', 55, 'en', 'Asymmetric neck'), ('attribute_value', 55, 'tr', 'Asimetrik yaka'),
+    ('attribute_value', 56, 'en', 'Shawl collar'),    ('attribute_value', 56, 'tr', 'Şal yaka'),
+    ('attribute_value', 57, 'en', 'Lapel collar'),    ('attribute_value', 57, 'tr', 'Ceket yakası'),
+    ('attribute_value', 58, 'en', 'Hooded'),          ('attribute_value', 58, 'tr', 'Kapüşonlu'),
+    ('attribute_value', 59, 'en', 'Collarless'),      ('attribute_value', 59, 'tr', 'Yakasız'),
+    ('attribute_value', 60, 'en', 'Scoop neck'),      ('attribute_value', 60, 'tr', 'U yaka'),
+    ('attribute_value', 61, 'en', 'Strapless'),       ('attribute_value', 61, 'tr', 'Straplez'),
+    ('attribute_value', 62, 'en', 'One shoulder'),    ('attribute_value', 62, 'tr', 'Tek omuz'),
+    ('attribute_value', 63, 'en', 'Skinny fit'),      ('attribute_value', 63, 'tr', 'Skinny kesim'),
+    ('attribute_value', 64, 'en', 'Straight fit'),    ('attribute_value', 64, 'tr', 'Düz kesim'),
+    ('attribute_value', 65, 'en', 'Bootcut'),         ('attribute_value', 65, 'tr', 'İspanyol paça'),
+    ('attribute_value', 66, 'en', 'Tapered fit'),     ('attribute_value', 66, 'tr', 'Daralan paça'),
+    ('attribute_value', 67, 'en', 'Loose fit'),       ('attribute_value', 67, 'tr', 'Salaş kesim'),
+    ('attribute_value', 68, 'en', 'Oversized'),       ('attribute_value', 68, 'tr', 'Oversize'),
+    ('attribute_value', 69, 'en', 'Baggy fit'),       ('attribute_value', 69, 'tr', 'Baggy kesim'),
+    ('attribute_value', 70, 'en', 'Relaxed fit'),     ('attribute_value', 70, 'tr', 'Rahat kesim'),
+    ('attribute_value', 71, 'en', 'Pinstripe'),       ('attribute_value', 71, 'tr', 'İnce çizgili'),
+    ('attribute_value', 72, 'en', 'Gingham'),         ('attribute_value', 72, 'tr', 'Pötikareli'),
+    ('attribute_value', 73, 'en', 'Houndstooth'),     ('attribute_value', 73, 'tr', 'Kaz ayağı desenli'),
+    ('attribute_value', 74, 'en', 'Herringbone'),     ('attribute_value', 74, 'tr', 'Balıksırtı desenli'),
+    ('attribute_value', 75, 'en', 'Paisley'),         ('attribute_value', 75, 'tr', 'Şal desenli'),
+    ('attribute_value', 76, 'en', 'Animal print'),    ('attribute_value', 76, 'tr', 'Hayvan desenli'),
+    ('attribute_value', 77, 'en', 'Tie-dye'),         ('attribute_value', 77, 'tr', 'Batik'),
+    ('attribute_value', 78, 'en', 'Color block'),     ('attribute_value', 78, 'tr', 'Renk bloklu'),
+    ('attribute_value', 79, 'en', 'Argyle'),          ('attribute_value', 79, 'tr', 'Baklava desenli'),
+    ('attribute_value', 80, 'en', 'Embroidered'),     ('attribute_value', 80, 'tr', 'Nakışlı'),
+    ('attribute_value', 81, 'en', 'Sequin'),          ('attribute_value', 81, 'tr', 'Payetli'),
+    ('attribute_value', 82, 'en', 'Geometric'),       ('attribute_value', 82, 'tr', 'Geometrik desenli'),
+    ('attribute_value', 83, 'en', 'Abstract'),        ('attribute_value', 83, 'tr', 'Soyut desenli'),
+    ('attribute_value', 84, 'en', 'Three-quarter sleeve'), ('attribute_value', 84, 'tr', 'Truvakar kol'),
+    ('attribute_value', 85, 'en', 'Cap sleeve'),      ('attribute_value', 85, 'tr', 'Kap kol'),
+    ('attribute_value', 86, 'en', 'Puff sleeve'),     ('attribute_value', 86, 'tr', 'Balon kol'),
+    ('attribute_value', 87, 'en', 'Raglan sleeve'),   ('attribute_value', 87, 'tr', 'Reglan kol'),
+    ('attribute_value', 88, 'en', 'Batwing sleeve'),  ('attribute_value', 88, 'tr', 'Yarasa kol'),
+    ('attribute_value', 89, 'en', 'Bell sleeve'),     ('attribute_value', 89, 'tr', 'İspanyol kol'),
+    ('attribute_value', 90, 'en', 'Spaghetti strap'), ('attribute_value', 90, 'tr', 'İnce askılı'),
+    ('attribute_value', 91, 'en', 'Cashmere'),        ('attribute_value', 91, 'tr', 'Kaşmir'),
+    ('attribute_value', 92, 'en', 'Viscose'),         ('attribute_value', 92, 'tr', 'Viskon'),
+    ('attribute_value', 93, 'en', 'Polyester'),       ('attribute_value', 93, 'tr', 'Polyester'),
+    ('attribute_value', 94, 'en', 'Satin'),           ('attribute_value', 94, 'tr', 'Saten'),
+    ('attribute_value', 95, 'en', 'Velvet'),          ('attribute_value', 95, 'tr', 'Kadife'),
+    ('attribute_value', 96, 'en', 'Suede'),           ('attribute_value', 96, 'tr', 'Süet'),
+    ('attribute_value', 97, 'en', 'Fleece'),          ('attribute_value', 97, 'tr', 'Polar'),
+    ('attribute_value', 98, 'en', 'Knit'),            ('attribute_value', 98, 'tr', 'Triko'),
+    ('attribute_value', 99, 'en', 'Lace'),            ('attribute_value', 99, 'tr', 'Dantel'),
+    ('attribute_value', 100, 'en', 'Chiffon'),        ('attribute_value', 100, 'tr', 'Şifon'),
+    ('attribute_value', 101, 'en', 'Tweed'),          ('attribute_value', 101, 'tr', 'Tüvit'),
+    ('attribute_value', 102, 'en', 'Nylon'),          ('attribute_value', 102, 'tr', 'Naylon'),
+    ('attribute_value', 103, 'en', 'Canvas'),         ('attribute_value', 103, 'tr', 'Kanvas'),
+    ('attribute_value', 104, 'en', 'Orange'),         ('attribute_value', 104, 'tr', 'Turuncu'),
+    ('attribute_value', 105, 'en', 'Turquoise'),      ('attribute_value', 105, 'tr', 'Turkuaz'),
+    ('attribute_value', 106, 'en', 'Olive'),          ('attribute_value', 106, 'tr', 'Zeytin yeşili'),
+    ('attribute_value', 107, 'en', 'Khaki'),          ('attribute_value', 107, 'tr', 'Haki'),
+    ('attribute_value', 108, 'en', 'Burgundy'),       ('attribute_value', 108, 'tr', 'Bordo'),
+    ('attribute_value', 109, 'en', 'Cream'),          ('attribute_value', 109, 'tr', 'Krem'),
+    ('attribute_value', 110, 'en', 'Mustard'),        ('attribute_value', 110, 'tr', 'Hardal'),
+    ('attribute_value', 111, 'en', 'Teal'),           ('attribute_value', 111, 'tr', 'Petrol'),
+    ('attribute_value', 112, 'en', 'Lilac'),          ('attribute_value', 112, 'tr', 'Lila'),
+    ('attribute_value', 113, 'en', 'Mint'),           ('attribute_value', 113, 'tr', 'Mint yeşili'),
+    ('attribute_value', 114, 'en', 'Coral'),          ('attribute_value', 114, 'tr', 'Mercan'),
+    ('attribute_value', 115, 'en', 'Charcoal'),       ('attribute_value', 115, 'tr', 'Antrasit'),
+    ('attribute_value', 116, 'en', 'Multicolor'),     ('attribute_value', 116, 'tr', 'Çok renkli'),
+    ('attribute_value', 117, 'en', 'Mini'),           ('attribute_value', 117, 'tr', 'Mini'),
+    ('attribute_value', 118, 'en', 'Knee-length'),    ('attribute_value', 118, 'tr', 'Diz boyu'),
+    ('attribute_value', 119, 'en', 'Midi'),           ('attribute_value', 119, 'tr', 'Midi'),
+    ('attribute_value', 120, 'en', 'Maxi'),           ('attribute_value', 120, 'tr', 'Maksi'),
+    ('attribute_value', 121, 'en', 'Cropped'),        ('attribute_value', 121, 'tr', 'Crop'),
+    ('attribute_value', 122, 'en', 'Ankle-length'),   ('attribute_value', 122, 'tr', 'Bilek boyu'),
+    ('attribute_value', 123, 'en', 'Long'),           ('attribute_value', 123, 'tr', 'Uzun');
+)sql";
+
 }  // namespace
 
 void seedDatabase(Database& db) {
     db.execute(kSeedSql);
     db.execute(kSeedSqlTranslations);
+    db.execute(kSeedSqlExpansion);
 }
 
 }  // namespace negiysem

@@ -151,6 +151,7 @@ const CATEGORY_EMOJI = {
     outerwear: "🧥",
     top: "👕",
     bottom: "👖",
+    "one-piece": "👗",
     footwear: "👟",
     accessory: "🧣",
     jewelry: "💍",
@@ -324,6 +325,27 @@ async function fetchJson(url, options) {
     const res = await fetch(url, options);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return res.json();
+}
+
+// Phone photos are often 5-10 MB, which makes classification slow and
+// flaky. Downscale to a JPEG that fits comfortably in one API call.
+async function shrinkPhoto(file, maxSide = 1280) {
+    try {
+        const bitmap = await createImageBitmap(file);
+        const scale = Math.min(1, maxSide / Math.max(bitmap.width, bitmap.height));
+        if (scale === 1 && file.size < 1.5 * 1024 * 1024) return file;
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.round(bitmap.width * scale);
+        canvas.height = Math.round(bitmap.height * scale);
+        canvas.getContext("2d").drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+        const blob = await new Promise((r) => canvas.toBlob(r, "image/jpeg", 0.85));
+        if (!blob) return file;
+        return new File([blob], file.name.replace(/\.\w+$/, "") + ".jpg",
+                        { type: "image/jpeg" });
+    } catch (err) {
+        console.error("shrink failed, sending original", err);
+        return file;
+    }
 }
 
 // Star rating + optional comment under an outfit. A poor rating may get a
@@ -616,7 +638,8 @@ async function loadAttributes() {
 }
 
 // Fixed display order for the wardrobe groups.
-const CATEGORY_ORDER = ["outerwear", "top", "bottom", "footwear", "accessory", "jewelry"];
+const CATEGORY_ORDER =
+    ["outerwear", "top", "bottom", "one-piece", "footwear", "accessory", "jewelry"];
 
 async function loadWardrobe() {
     const data = await fetchJson(`/api/wardrobe?lang=${lang}`);
@@ -708,10 +731,10 @@ async function bulkUpload() {
     const progress = $("bulk-progress");
     progress.innerHTML = "";
 
-    for (const file of files) {
+    for (const original of files) {
         const li = document.createElement("li");
         const label = document.createElement("span");
-        label.textContent = file.name;
+        label.textContent = original.name;
         const status = document.createElement("span");
         status.className = "bulk-status";
         status.textContent = t("bulk_reading");
@@ -719,6 +742,7 @@ async function bulkUpload() {
         progress.appendChild(li);
 
         try {
+            const file = await shrinkPhoto(original);
             const res = await fetch("/api/classify-photo", {
                 method: "POST",
                 headers: { "Content-Type": file.type },
@@ -758,15 +782,16 @@ async function bulkUpload() {
 }
 
 async function classifyPhoto() {
-    const file = $("photo-input").files[0];
+    const original = $("photo-input").files[0];
     const note = $("classify-note");
-    if (!file) {
+    if (!original) {
         note.classList.add("hidden");
         return;
     }
     note.textContent = t("classifying");
     note.classList.remove("hidden");
     try {
+        const file = await shrinkPhoto(original);
         const res = await fetch("/api/classify-photo", {
             method: "POST",
             headers: { "Content-Type": file.type },
@@ -805,8 +830,9 @@ async function saveItem() {
             body: JSON.stringify(body),
         });
 
-        const file = $("photo-input").files[0];
-        if (file) {
+        const original = $("photo-input").files[0];
+        if (original) {
+            const file = await shrinkPhoto(original);
             await fetchJson(`/api/wardrobe/${created.id}/photo`, {
                 method: "PUT",
                 headers: { "Content-Type": file.type },

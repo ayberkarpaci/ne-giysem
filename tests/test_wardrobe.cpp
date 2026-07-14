@@ -94,6 +94,28 @@ TEST_CASE("expanded catalog supports jerseys with pattern and sleeve") {
     CHECK(items[0].values.size() == 3);
 }
 
+TEST_CASE("dresses live in the one-piece category with rich attributes") {
+    Database db = makeSeededDb();
+    WardrobeRepository repo(db);
+
+    const auto forDress = repo.attributesForType("dress", "en");
+    std::vector<std::string> slugs;
+    for (const auto& def : forDress) slugs.push_back(def.slug);
+    CHECK(std::find(slugs.begin(), slugs.end(), "collar") != slugs.end());
+    CHECK(std::find(slugs.begin(), slugs.end(), "sleeve") != slugs.end());
+    CHECK(std::find(slugs.begin(), slugs.end(), "length") != slugs.end());
+    CHECK(std::find(slugs.begin(), slugs.end(), "fit") == slugs.end());
+
+    const int id = repo.addItem("dress", "",
+                                {"burgundy", "satin", "asymmetric-neck", "midi"});
+    CHECK(id > 0);
+    const auto items = repo.listItems("tr");
+    REQUIRE(items.size() == 1);
+    CHECK(items[0].category_slug == "one-piece");
+    CHECK(items[0].type_name == "Elbise");
+    CHECK(items[0].values.size() == 4);
+}
+
 TEST_CASE("jewelry items carry metal and color but no garment attributes") {
     Database db = makeSeededDb();
     WardrobeRepository repo(db);

@@ -178,6 +178,18 @@ TEST_CASE("stylist prompt and picks") {
         });
         CHECK(top->item_slug == "t-shirt");
     }
+    SECTION("a one-piece pick suppresses the top and bottom backfill") {
+        auto with_dress = candidates;
+        with_dress["one-piece"] = {candidate("dress", "one-piece", 1.4, {"burgundy"})};
+        const auto styled = negiysem::parseStylistPicksJson(
+            R"({"picks":{"one-piece":1,"footwear":1}})", with_dress);
+        std::vector<std::string> categories;
+        for (const auto& item : styled.items) categories.push_back(item.category_slug);
+        CHECK(std::count(categories.begin(), categories.end(), "one-piece") == 1);
+        CHECK(std::count(categories.begin(), categories.end(), "top") == 0);
+        CHECK(std::count(categories.begin(), categories.end(), "bottom") == 0);
+        CHECK(std::count(categories.begin(), categories.end(), "footwear") == 1);
+    }
     SECTION("unparseable responses throw") {
         CHECK_THROWS(negiysem::parseStylistPicksJson("not json", candidates));
         CHECK_THROWS(negiysem::parseStylistPicksJson(R"({"no_picks":1})", candidates));

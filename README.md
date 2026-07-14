@@ -69,7 +69,8 @@ ctest --test-dir build --output-on-failure
 
 ## Status
 
-Core engine, SQLite catalog (55 garment types incl. jewelry), Gemini photo
+Core engine, SQLite catalog (72 garment types incl. jewelry and one-piece
+garments, with a research-based attribute vocabulary), Gemini photo
 classification with multi-color support, weather with location correction,
 hour windows and manual entry, and a feedback loop that learns from ratings
 are in place — all behind a bilingual (EN/TR) web UI. Next up: a mobile app
