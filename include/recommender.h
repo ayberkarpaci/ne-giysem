@@ -81,6 +81,20 @@ double feedbackAdjustment(double average_rating);
 // otherwise -0.15 per level of distance from it.
 double formalityAdjustment(int item_formality, int target);
 
+// Combination-level harmony terms, each <= 0, exposed for unit testing.
+// Colors/patterns come from wardrobe value_slugs; catalog items score 0.
+double colorHarmony(const std::vector<RecommendedItem>& outfit);
+double formalityConsistency(const std::vector<RecommendedItem>& outfit);
+double patternClashPenalty(const std::vector<RecommendedItem>& outfit);
+
+// Assembles the best outfit from per-category candidates by scoring whole
+// combinations (mean of core item scores + harmony terms) instead of
+// picking each category independently. Core pieces are top+bottom or a
+// one-piece, plus footwear; optional categories join when their score plus
+// the harmony change clears `optional_threshold`.
+std::vector<RecommendedItem> assembleOutfit(const OutfitCandidates& candidates,
+                                            double optional_threshold);
+
 // Picks the best-scoring item per category. Core categories (top, bottom,
 // footwear) are always present; optional ones (outerwear, accessory) only
 // when their best item scores at least kOptionalCategoryThreshold.

@@ -67,8 +67,24 @@ double scoreItem(double temp_fit, double mood_weight, double rain_adj) {
     return temp_fit * (1.0 + mood_weight) + rain_adj;
 }
 
-bool isCoreCategory(const std::string& slug) {
-    return slug == "top" || slug == "bottom" || slug == "footwear";
+// Color/pattern vocabulary the harmony terms reason over. Neutrals pair
+// with everything; statement colors are counted and checked for clashes.
+const std::vector<std::string> kNeutralColors = {
+    "black", "white", "gray", "charcoal", "navy", "beige", "brown", "cream", "khaki"};
+const std::vector<std::string> kStatementColors = {
+    "blue", "red", "green", "yellow", "pink", "purple", "orange", "turquoise",
+    "olive", "burgundy", "mustard", "teal", "lilac", "mint", "coral", "multicolor"};
+const std::vector<std::pair<std::string, std::string>> kClashingColors = {
+    {"red", "pink"}, {"red", "orange"}, {"red", "green"},
+    {"purple", "green"}, {"orange", "pink"}};
+const std::vector<std::string> kBoldPatterns = {
+    "striped", "plaid", "floral", "polka-dot", "graphic", "camouflage",
+    "gingham", "houndstooth", "herringbone", "paisley", "animal-print",
+    "tie-dye", "color-block", "argyle", "embroidered", "sequin",
+    "geometric", "abstract"};
+
+bool listed(const std::vector<std::string>& list, const std::string& value) {
+    return std::find(list.begin(), list.end(), value) != list.end();
 }
 
 void ensureMoodExists(sqlite3* db, const std::string& mood_slug) {
@@ -207,24 +223,139 @@ RecommendedItem readScoredItem(sqlite3_stmt* stmt,
     return item;
 }
 
-// Applies the per-category selection and ordering rules to scored items.
-// One-piece garments (dress, jumpsuit) replace top and bottom, which this
-// rule-based picker cannot express, so it leaves them to the stylist pass.
-std::vector<RecommendedItem> pickOutfit(std::map<std::string, RecommendedItem>&& best,
-                                        double optional_threshold) {
-    std::vector<RecommendedItem> outfit;
-    for (auto& [category, item] : best) {
-        if (category == "one-piece") continue;
-        if (isCoreCategory(category) || item.score >= optional_threshold) {
-            outfit.push_back(std::move(item));
+}  // namespace
+
+double colorHarmony(const std::vector<RecommendedItem>& outfit) {
+    std::vector<std::string> statement;
+    for (const auto& item : outfit) {
+        for (const auto& slug : item.value_slugs) {
+            if (listed(kStatementColors, slug) && !listed(statement, slug)) {
+                statement.push_back(slug);
+            }
         }
     }
-    std::sort(outfit.begin(), outfit.end(),
-              [](const RecommendedItem& a, const RecommendedItem& b) { return a.score > b.score; });
-    return outfit;
+    // Neutrals are free; more than two statement colors starts to cost.
+    double penalty = -0.2 * std::max(0, static_cast<int>(statement.size()) - 2);
+    for (const auto& [a, b] : kClashingColors) {
+        if (listed(statement, a) && listed(statement, b)) penalty -= 0.3;
+    }
+    return penalty;
+}
+
+double formalityConsistency(const std::vector<RecommendedItem>& outfit) {
+    if (outfit.empty()) return 0.0;
+    int min_f = 5;
+    int max_f = 0;
+    for (const auto& item : outfit) {
+        min_f = std::min(min_f, item.formality);
+        max_f = std::max(max_f, item.formality);
+    }
+    // A spread of up to two levels reads as intentional; beyond that the
+    // outfit mixes dress codes (sweatpants with a blazer).
+    return -0.2 * std::max(0, max_f - min_f - 2);
+}
+
+double patternClashPenalty(const std::vector<RecommendedItem>& outfit) {
+    int bold = 0;
+    for (const auto& item : outfit) {
+        for (const auto& slug : item.value_slugs) {
+            if (listed(kBoldPatterns, slug)) {
+                ++bold;
+                break;
+            }
+        }
+    }
+    return -0.25 * std::max(0, bold - 1);
+}
+
+namespace {
+
+double harmonyTerms(const std::vector<RecommendedItem>& outfit) {
+    return colorHarmony(outfit) + formalityConsistency(outfit) +
+           patternClashPenalty(outfit);
+}
+
+// Mean item score + harmony: means keep one-piece combos (one garment)
+// comparable with top+bottom combos (two garments).
+double comboScore(const std::vector<RecommendedItem>& combo) {
+    if (combo.empty()) return 0.0;
+    double sum = 0.0;
+    for (const auto& item : combo) sum += item.score;
+    return sum / static_cast<double>(combo.size()) + harmonyTerms(combo);
+}
+
+const std::vector<RecommendedItem> kNone;  // empty candidate list fallback
+
+const std::vector<RecommendedItem>& candidatesFor(const OutfitCandidates& candidates,
+                                                  const char* category) {
+    const auto it = candidates.find(category);
+    return it == candidates.end() ? kNone : it->second;
 }
 
 }  // namespace
+
+std::vector<RecommendedItem> assembleOutfit(const OutfitCandidates& candidates,
+                                            double optional_threshold) {
+    const auto& tops = candidatesFor(candidates, "top");
+    const auto& bottoms = candidatesFor(candidates, "bottom");
+    const auto& one_pieces = candidatesFor(candidates, "one-piece");
+    const auto& shoes = candidatesFor(candidates, "footwear");
+
+    // Enumerate every core combination: top+bottom pairs (or whichever of
+    // the two exists) and one-piece garments, each with every shoe option.
+    std::vector<std::vector<RecommendedItem>> bases;
+    if (!tops.empty() && !bottoms.empty()) {
+        for (const auto& top : tops) {
+            for (const auto& bottom : bottoms) bases.push_back({top, bottom});
+        }
+    } else {
+        for (const auto& top : tops) bases.push_back({top});
+        for (const auto& bottom : bottoms) bases.push_back({bottom});
+    }
+    for (const auto& piece : one_pieces) bases.push_back({piece});
+    if (bases.empty()) bases.push_back({});
+
+    std::vector<RecommendedItem> best;
+    double best_score = -1e9;
+    for (const auto& base : bases) {
+        if (shoes.empty()) {
+            if (comboScore(base) > best_score && !base.empty()) {
+                best_score = comboScore(base);
+                best = base;
+            }
+            continue;
+        }
+        for (const auto& shoe : shoes) {
+            std::vector<RecommendedItem> combo = base;
+            combo.push_back(shoe);
+            const double score = comboScore(combo);
+            if (score > best_score) {
+                best_score = score;
+                best = std::move(combo);
+            }
+        }
+    }
+
+    // Optional layers join only when they earn their place: their own score
+    // plus the harmony change must clear the threshold.
+    for (const char* category : {"outerwear", "accessory", "jewelry"}) {
+        const auto& options = candidatesFor(candidates, category);
+        if (options.empty()) continue;
+        const RecommendedItem& option = options.front();
+        std::vector<RecommendedItem> extended = best;
+        extended.push_back(option);
+        const double delta = harmonyTerms(extended) - harmonyTerms(best);
+        if (option.score + delta >= optional_threshold) {
+            best = std::move(extended);
+        }
+    }
+
+    std::sort(best.begin(), best.end(),
+              [](const RecommendedItem& a, const RecommendedItem& b) {
+                  return a.score > b.score;
+              });
+    return best;
+}
 
 namespace {
 
@@ -252,25 +383,15 @@ void insertCandidate(OutfitCandidates& by_category, RecommendedItem&& item, int 
     if (static_cast<int>(list.size()) > limit) list.resize(limit);
 }
 
-// The classic outfit: the best candidate of every category, thresholded.
-std::vector<RecommendedItem> bestPerCategory(OutfitCandidates&& candidates,
-                                             double optional_threshold) {
-    std::map<std::string, RecommendedItem> best;
-    for (auto& [category, list] : candidates) {
-        best[category] = std::move(list.front());
-    }
-    return pickOutfit(std::move(best), optional_threshold);
-}
-
 }  // namespace
 
 std::vector<RecommendedItem> Recommender::recommend(const RecommendationRequest& request) const {
-    return bestPerCategory(candidates(request, 1), kOptionalCategoryThreshold);
+    return assembleOutfit(candidates(request, 3), kOptionalCategoryThreshold);
 }
 
 std::vector<RecommendedItem> Recommender::recommendFromWardrobe(
     const RecommendationRequest& request) const {
-    return bestPerCategory(candidatesFromWardrobe(request, 1), kOptionalCategoryThreshold);
+    return assembleOutfit(candidatesFromWardrobe(request, 3), kOptionalCategoryThreshold);
 }
 
 OutfitCandidates Recommender::candidates(const RecommendationRequest& request,

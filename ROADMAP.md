@@ -6,10 +6,10 @@ the phases below move harmony, formality and learning into our own algorithm.
 
 ## Phase 1 — Outfit quality (the algorithmic core)
 
-- [ ] **1.1 Formality & style metadata** — `formality` column (0 sporty … 5 formal)
+- [x] **1.1 Formality & style metadata** — `formality` column (0 sporty … 5 formal)
   on every catalog type; map the already-parsed `occasion` (work/casual/sport/
   date/special) to a target formality and penalize distance from it.
-- [ ] **1.2 Combination-level scoring** — enumerate combinations of the top
+- [x] **1.2 Combination-level scoring** — enumerate combinations of the top
   candidates per category and score them as a whole: sum of item scores +
   color-harmony term (neutrals pair with everything, clash pairs penalized) +
   formality-consistency term + bold-pattern-count penalty. One-piece garments

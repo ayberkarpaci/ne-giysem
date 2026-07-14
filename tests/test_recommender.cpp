@@ -241,6 +241,100 @@ TEST_CASE("occasion formality steers the pick") {
     CHECK(formal->item_slug == "classic-shoes");
 }
 
+namespace {
+
+RecommendedItem piece(const std::string& slug, const std::string& category, double score,
+                      std::vector<std::string> values = {}, int formality = 2) {
+    RecommendedItem item;
+    item.item_slug = slug;
+    item.item_name = slug;
+    item.category_slug = category;
+    item.score = score;
+    item.value_slugs = std::move(values);
+    item.formality = formality;
+    return item;
+}
+
+}  // namespace
+
+TEST_CASE("outfit harmony terms") {
+    SECTION("clashing statement colors are penalized, neutrals are free") {
+        const std::vector<RecommendedItem> clash = {
+            piece("t-shirt", "top", 1.0, {"red"}),
+            piece("chinos", "bottom", 1.0, {"green"})};
+        CHECK_THAT(negiysem::colorHarmony(clash), WithinAbs(-0.3, 1e-9));
+
+        const std::vector<RecommendedItem> neutral = {
+            piece("t-shirt", "top", 1.0, {"black"}),
+            piece("chinos", "bottom", 1.0, {"beige", "white"})};
+        CHECK_THAT(negiysem::colorHarmony(neutral), WithinAbs(0.0, 1e-9));
+
+        const std::vector<RecommendedItem> loud = {
+            piece("t-shirt", "top", 1.0, {"blue", "yellow"}),
+            piece("chinos", "bottom", 1.0, {"turquoise"})};
+        CHECK_THAT(negiysem::colorHarmony(loud), WithinAbs(-0.2, 1e-9));
+    }
+    SECTION("formality spread beyond two levels costs") {
+        const std::vector<RecommendedItem> mixed = {
+            piece("sweatpants", "bottom", 1.0, {}, 0),
+            piece("blazer", "outerwear", 1.0, {}, 4)};
+        CHECK_THAT(negiysem::formalityConsistency(mixed), WithinAbs(-0.4, 1e-9));
+        const std::vector<RecommendedItem> fine = {
+            piece("jeans", "bottom", 1.0, {}, 2),
+            piece("shirt", "top", 1.0, {}, 3)};
+        CHECK_THAT(negiysem::formalityConsistency(fine), WithinAbs(0.0, 1e-9));
+    }
+    SECTION("more than one bold pattern costs") {
+        const std::vector<RecommendedItem> busy = {
+            piece("shirt", "top", 1.0, {"striped"}),
+            piece("chinos", "bottom", 1.0, {"floral"})};
+        CHECK_THAT(negiysem::patternClashPenalty(busy), WithinAbs(-0.25, 1e-9));
+    }
+}
+
+TEST_CASE("assembleOutfit scores combinations, not items") {
+    using negiysem::OutfitCandidates;
+
+    SECTION("a slightly weaker top wins when it avoids a color clash") {
+        OutfitCandidates candidates = {
+            {"top", {piece("red-tee", "top", 1.6, {"red"}),
+                     piece("white-tee", "top", 1.5, {"white"})}},
+            {"bottom", {piece("green-pants", "bottom", 1.5, {"green"})}},
+            {"footwear", {piece("sneakers", "footwear", 1.0)}},
+        };
+        const auto outfit = negiysem::assembleOutfit(candidates, 0.8);
+        const auto* top = findCategory(outfit, "top");
+        REQUIRE(top != nullptr);
+        CHECK(top->item_slug == "white-tee");  // 1.5 beats 1.6 - 0.3 clash
+    }
+    SECTION("a strong one-piece replaces top and bottom") {
+        OutfitCandidates candidates = {
+            {"top", {piece("tee", "top", 1.3)}},
+            {"bottom", {piece("jeans", "bottom", 1.3)}},
+            {"one-piece", {piece("dress", "one-piece", 2.0)}},
+            {"footwear", {piece("sneakers", "footwear", 1.0)}},
+        };
+        const auto outfit = negiysem::assembleOutfit(candidates, 0.8);
+        CHECK(findCategory(outfit, "one-piece") != nullptr);
+        CHECK(findCategory(outfit, "top") == nullptr);
+        CHECK(findCategory(outfit, "bottom") == nullptr);
+    }
+    SECTION("an optional layer must fit the outfit, not just score well") {
+        OutfitCandidates candidates = {
+            {"top", {piece("tee", "top", 1.5, {}, 1)}},
+            {"bottom", {piece("jeans", "bottom", 1.5, {}, 1)}},
+            {"footwear", {piece("sneakers", "footwear", 1.0, {}, 1)}},
+            {"accessory", {piece("tie", "accessory", 0.9, {}, 5)}},
+        };
+        auto outfit = negiysem::assembleOutfit(candidates, 0.8);
+        CHECK(findCategory(outfit, "accessory") == nullptr);  // formality clash
+
+        candidates["accessory"] = {piece("scarf", "accessory", 0.9, {}, 2)};
+        outfit = negiysem::assembleOutfit(candidates, 0.8);
+        CHECK(findCategory(outfit, "accessory") != nullptr);
+    }
+}
+
 TEST_CASE("unknown mood throws") {
     Database db = makeSeededDb();
     RecommendationRequest request;
