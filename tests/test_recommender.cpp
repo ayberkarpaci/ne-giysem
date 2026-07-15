@@ -341,3 +341,40 @@ TEST_CASE("unknown mood throws") {
     request.mood_slug = "hangry";
     CHECK_THROWS(Recommender(db).recommend(request));
 }
+
+TEST_CASE("pairAffinityBonus rewards pieces that shone together") {
+    using negiysem::PairAffinities;
+    const std::vector<RecommendedItem> outfit = {
+        piece("t-shirt", "top", 1.0),
+        piece("jeans", "bottom", 1.0),
+        piece("sneakers", "footwear", 1.0)};
+
+    SECTION("no memory, no bonus") {
+        CHECK_THAT(negiysem::pairAffinityBonus(outfit, {}), WithinAbs(0.0, 1e-9));
+    }
+    SECTION("0.05 per co-occurrence, order-independent") {
+        const PairAffinities memory = {{{"jeans", "t-shirt"}, 2}};
+        CHECK_THAT(negiysem::pairAffinityBonus(outfit, memory), WithinAbs(0.1, 1e-9));
+    }
+    SECTION("caps at 0.15 per pair, sums across pairs") {
+        const PairAffinities memory = {{{"jeans", "t-shirt"}, 10},
+                                       {{"jeans", "sneakers"}, 1}};
+        CHECK_THAT(negiysem::pairAffinityBonus(outfit, memory),
+                   WithinAbs(0.15 + 0.05, 1e-9));
+    }
+}
+
+TEST_CASE("assembleOutfit prefers a remembered pair over a slightly better item") {
+    negiysem::OutfitCandidates candidates;
+    candidates["top"] = {piece("blazer", "top", 1.0), piece("t-shirt", "top", 0.92)};
+    candidates["bottom"] = {piece("jeans", "bottom", 1.0)};
+
+    // Without memory the blazer wins on raw score...
+    const auto plain = negiysem::assembleOutfit(candidates, 0.8);
+    CHECK(findCategory(plain, "top")->item_slug == "blazer");
+
+    // ...but a well-rated t-shirt+jeans history flips the choice.
+    const negiysem::PairAffinities memory = {{{"jeans", "t-shirt"}, 3}};
+    const auto remembered = negiysem::assembleOutfit(candidates, 0.8, memory);
+    CHECK(findCategory(remembered, "top")->item_slug == "t-shirt");
+}

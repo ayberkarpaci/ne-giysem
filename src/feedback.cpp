@@ -230,6 +230,24 @@ std::optional<StoredRecommendation> FeedbackRepository::recommendation(int id) c
     return stored;
 }
 
+PairAffinities FeedbackRepository::pairAffinities(int min_rating) const {
+    Statement stmt(db_.handle(), R"sql(
+        SELECT a.item_slug, b.item_slug, COUNT(*)
+        FROM recommendation_feedback f
+        JOIN recommendation_items a ON a.recommendation_id = f.recommendation_id
+        JOIN recommendation_items b ON b.recommendation_id = f.recommendation_id
+             AND a.item_slug < b.item_slug
+        WHERE f.rating >= ?1
+        GROUP BY a.item_slug, b.item_slug;
+    )sql");
+    stmt.bindInt(1, min_rating);
+    PairAffinities affinities;
+    while (stmt.step()) {
+        affinities[{stmt.columnText(0), stmt.columnText(1)}] = stmt.columnInt(2);
+    }
+    return affinities;
+}
+
 std::map<std::string, double> FeedbackRepository::averageRatings() const {
     Statement stmt(db_.handle(), R"sql(
         SELECT ri.item_slug, AVG(f.rating)

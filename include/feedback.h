@@ -79,6 +79,11 @@ public:
     // Average rating per item slug over all feedback, for score adjustments.
     std::map<std::string, double> averageRatings() const;
 
+    // How often each pair of item types appeared together in outfits rated
+    // at least `min_rating` — the recommender's outfit memory. Keys hold
+    // the smaller slug first.
+    PairAffinities pairAffinities(int min_rating = 4) const;
+
 private:
     Database& db_;
 };

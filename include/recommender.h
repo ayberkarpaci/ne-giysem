@@ -56,6 +56,11 @@ struct RecommendedItem {
 // Scored items per category slug, each list sorted best first.
 using OutfitCandidates = std::map<std::string, std::vector<RecommendedItem>>;
 
+// How often two item types appeared together in well-rated outfits. Keys
+// are slug pairs with the smaller slug first (see FeedbackRepository::
+// pairAffinities); values are co-occurrence counts.
+using PairAffinities = std::map<std::pair<std::string, std::string>, int>;
+
 // Scoring building blocks, exposed for unit testing.
 //
 // 1.0 when the temperature is inside the item's comfort range, decaying by
@@ -88,13 +93,20 @@ double colorHarmony(const std::vector<RecommendedItem>& outfit);
 double formalityConsistency(const std::vector<RecommendedItem>& outfit);
 double patternClashPenalty(const std::vector<RecommendedItem>& outfit);
 
+// Outfit memory (>= 0): pieces that shone together in past well-rated
+// outfits earn a bonus when combined again — 0.05 per co-occurrence,
+// capped at 0.15 per pair.
+double pairAffinityBonus(const std::vector<RecommendedItem>& outfit,
+                         const PairAffinities& affinities);
+
 // Assembles the best outfit from per-category candidates by scoring whole
-// combinations (mean of core item scores + harmony terms) instead of
-// picking each category independently. Core pieces are top+bottom or a
-// one-piece, plus footwear; optional categories join when their score plus
-// the harmony change clears `optional_threshold`.
+// combinations (mean of core item scores + harmony terms + pair-affinity
+// bonus) instead of picking each category independently. Core pieces are
+// top+bottom or a one-piece, plus footwear; optional categories join when
+// their score plus the harmony change clears `optional_threshold`.
 std::vector<RecommendedItem> assembleOutfit(const OutfitCandidates& candidates,
-                                            double optional_threshold);
+                                            double optional_threshold,
+                                            const PairAffinities& affinities = {});
 
 // Picks the best-scoring item per category. Core categories (top, bottom,
 // footwear) are always present; optional ones (outerwear, accessory) only

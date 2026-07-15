@@ -193,3 +193,31 @@ TEST_CASE("feedback tags are stored, validated and read back") {
         CHECK(repo.tagsFor(rec_id).empty());
     }
 }
+
+TEST_CASE("pairAffinities counts pairs from well-rated outfits only") {
+    Database db = makeSeededDb();
+    FeedbackRepository repo(db);
+    const auto request = coldCozyRequest();
+
+    RecommendedItem tee;
+    tee.item_slug = "t-shirt";
+    RecommendedItem jeans;
+    jeans.item_slug = "jeans";
+    RecommendedItem boots;
+    boots.item_slug = "boots";
+
+    const int loved = repo.recordRecommendation(request, {tee, jeans, boots}, "wardrobe");
+    repo.addFeedback(loved, 5, "");
+    const int hated = repo.recordRecommendation(request, {tee, boots}, "wardrobe");
+    repo.addFeedback(hated, 1, "");
+
+    const auto memory = repo.pairAffinities();
+    CHECK(memory.size() == 3);  // pairs from the loved outfit only
+    CHECK(memory.at({"jeans", "t-shirt"}) == 1);
+    CHECK(memory.at({"boots", "jeans"}) == 1);
+    CHECK(memory.at({"boots", "t-shirt"}) == 1);  // the 1-star pair doesn't add
+
+    // A second high rating on the same outfit strengthens the memory.
+    repo.addFeedback(loved, 4, "");
+    CHECK(repo.pairAffinities().at({"jeans", "t-shirt"}) == 2);
+}

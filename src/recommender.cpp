@@ -269,20 +269,40 @@ double patternClashPenalty(const std::vector<RecommendedItem>& outfit) {
     return -0.25 * std::max(0, bold - 1);
 }
 
-namespace {
-
-double harmonyTerms(const std::vector<RecommendedItem>& outfit) {
-    return colorHarmony(outfit) + formalityConsistency(outfit) +
-           patternClashPenalty(outfit);
+double pairAffinityBonus(const std::vector<RecommendedItem>& outfit,
+                         const PairAffinities& affinities) {
+    if (affinities.empty()) return 0.0;
+    double bonus = 0.0;
+    for (size_t i = 0; i < outfit.size(); ++i) {
+        for (size_t j = i + 1; j < outfit.size(); ++j) {
+            auto key = std::minmax(outfit[i].item_slug, outfit[j].item_slug);
+            const auto it = affinities.find({key.first, key.second});
+            if (it != affinities.end()) {
+                bonus += std::min(0.15, 0.05 * it->second);
+            }
+        }
+    }
+    return bonus;
 }
 
-// Mean item score + harmony: means keep one-piece combos (one garment)
-// comparable with top+bottom combos (two garments).
-double comboScore(const std::vector<RecommendedItem>& combo) {
+namespace {
+
+// Harmony penalties plus the learned pair bonus — everything about how the
+// pieces relate, as opposed to how good each piece is on its own.
+double combinationTerms(const std::vector<RecommendedItem>& outfit,
+                        const PairAffinities& affinities) {
+    return colorHarmony(outfit) + formalityConsistency(outfit) +
+           patternClashPenalty(outfit) + pairAffinityBonus(outfit, affinities);
+}
+
+// Mean item score + combination terms: means keep one-piece combos (one
+// garment) comparable with top+bottom combos (two garments).
+double comboScore(const std::vector<RecommendedItem>& combo,
+                  const PairAffinities& affinities) {
     if (combo.empty()) return 0.0;
     double sum = 0.0;
     for (const auto& item : combo) sum += item.score;
-    return sum / static_cast<double>(combo.size()) + harmonyTerms(combo);
+    return sum / static_cast<double>(combo.size()) + combinationTerms(combo, affinities);
 }
 
 const std::vector<RecommendedItem> kNone;  // empty candidate list fallback
@@ -296,7 +316,8 @@ const std::vector<RecommendedItem>& candidatesFor(const OutfitCandidates& candid
 }  // namespace
 
 std::vector<RecommendedItem> assembleOutfit(const OutfitCandidates& candidates,
-                                            double optional_threshold) {
+                                            double optional_threshold,
+                                            const PairAffinities& affinities) {
     const auto& tops = candidatesFor(candidates, "top");
     const auto& bottoms = candidatesFor(candidates, "bottom");
     const auto& one_pieces = candidatesFor(candidates, "one-piece");
@@ -320,8 +341,8 @@ std::vector<RecommendedItem> assembleOutfit(const OutfitCandidates& candidates,
     double best_score = -1e9;
     for (const auto& base : bases) {
         if (shoes.empty()) {
-            if (comboScore(base) > best_score && !base.empty()) {
-                best_score = comboScore(base);
+            if (comboScore(base, affinities) > best_score && !base.empty()) {
+                best_score = comboScore(base, affinities);
                 best = base;
             }
             continue;
@@ -329,7 +350,7 @@ std::vector<RecommendedItem> assembleOutfit(const OutfitCandidates& candidates,
         for (const auto& shoe : shoes) {
             std::vector<RecommendedItem> combo = base;
             combo.push_back(shoe);
-            const double score = comboScore(combo);
+            const double score = comboScore(combo, affinities);
             if (score > best_score) {
                 best_score = score;
                 best = std::move(combo);
@@ -338,14 +359,15 @@ std::vector<RecommendedItem> assembleOutfit(const OutfitCandidates& candidates,
     }
 
     // Optional layers join only when they earn their place: their own score
-    // plus the harmony change must clear the threshold.
+    // plus the harmony/affinity change must clear the threshold.
     for (const char* category : {"outerwear", "accessory", "jewelry"}) {
         const auto& options = candidatesFor(candidates, category);
         if (options.empty()) continue;
         const RecommendedItem& option = options.front();
         std::vector<RecommendedItem> extended = best;
         extended.push_back(option);
-        const double delta = harmonyTerms(extended) - harmonyTerms(best);
+        const double delta = combinationTerms(extended, affinities) -
+                             combinationTerms(best, affinities);
         if (option.score + delta >= optional_threshold) {
             best = std::move(extended);
         }
@@ -387,12 +409,14 @@ void insertCandidate(OutfitCandidates& by_category, RecommendedItem&& item, int 
 }  // namespace
 
 std::vector<RecommendedItem> Recommender::recommend(const RecommendationRequest& request) const {
-    return assembleOutfit(candidates(request, 3), kOptionalCategoryThreshold);
+    return assembleOutfit(candidates(request, 3), kOptionalCategoryThreshold,
+                          FeedbackRepository(db_).pairAffinities());
 }
 
 std::vector<RecommendedItem> Recommender::recommendFromWardrobe(
     const RecommendationRequest& request) const {
-    return assembleOutfit(candidatesFromWardrobe(request, 3), kOptionalCategoryThreshold);
+    return assembleOutfit(candidatesFromWardrobe(request, 3), kOptionalCategoryThreshold,
+                          FeedbackRepository(db_).pairAffinities());
 }
 
 OutfitCandidates Recommender::candidates(const RecommendationRequest& request,

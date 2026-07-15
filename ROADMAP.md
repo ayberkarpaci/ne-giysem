@@ -19,8 +19,10 @@ the phases below move harmony, formality and learning into our own algorithm.
   too cold, colors clash, too formal, too sporty, uncomfortable. Tags are
   stored per rating (`feedback_tags`) and immediately steer the retry after
   a poor rating (temperature shift, formality target).
-- [ ] **1.4 Outfit memory** — learn pair affinities from highly rated
-  recommendations (items that shine together get a pair bonus in 1.2).
+- [x] **1.4 Outfit memory** — learn pair affinities from highly rated
+  recommendations (items that shine together get a pair bonus in 1.2):
+  +0.05 per >= 4-star co-occurrence, capped at 0.15 per pair, applied in
+  combination scoring.
 - [ ] **1.5 Temperature auto-calibration** — "too hot/cold" feedback nudges a
   per-type personal offset on the comfort range (bounded, cumulative).
 
