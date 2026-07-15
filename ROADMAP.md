@@ -30,11 +30,14 @@ the phases below move harmony, formality and learning into our own algorithm.
 
 ## Phase 2 — Real-life state
 
-- [ ] **2.1 "I wore this" button + wear history** (`wear_history` table).
-- [ ] **2.2 Variety** — decaying recency penalty (−C/days), weighted-random
-  choice among near-tied candidates, small exploration bonus for rarely worn pieces.
-- [ ] **2.3 Laundry state** — clean/dirty flag, auto-dirty after N wears,
-  dirty items excluded from candidates.
+- [x] **2.1 "I wore this" button + wear history** (`wear_history` table) —
+  one tap under a recommendation logs a wear for every wardrobe piece in it.
+- [x] **2.2 Variety** — decaying recency penalty (−0.3/days), random choice
+  among outfits within 0.05 of the best (wardrobe only), +0.05 exploration
+  bonus for never-worn pieces.
+- [x] **2.3 Laundry state** — clean/dirty flag with a per-category wear
+  budget (tops 2, bottoms 4, outerwear 8; shoes & co never), auto-dirty when
+  the budget runs out, dirty items excluded from candidates; washing resets.
 
 ## Phase 3 — A stylist that knows you
 

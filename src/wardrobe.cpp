@@ -98,6 +98,62 @@ bool WardrobeRepository::removeItem(int id) {
     return sqlite3_changes(db_.handle()) > 0;
 }
 
+namespace {
+
+// How many wears a category takes before the piece needs a wash;
+// 0 = never goes dirty on its own (shoes, accessories, jewelry).
+int wearBudget(const std::string& category_slug) {
+    if (category_slug == "top" || category_slug == "one-piece") return 2;
+    if (category_slug == "bottom") return 4;
+    if (category_slug == "outerwear") return 8;
+    return 0;
+}
+
+}  // namespace
+
+bool WardrobeRepository::recordWear(int id) {
+    std::string category;
+    {
+        Statement stmt(db_.handle(), R"sql(
+            SELECT c.slug FROM wardrobe_items w
+            JOIN clothing_items i ON i.id = w.type_id
+            JOIN clothing_categories c ON c.id = i.category_id
+            WHERE w.id = ?1;
+        )sql");
+        stmt.bindInt(1, id);
+        if (!stmt.step()) return false;
+        category = stmt.columnText(0);
+    }
+    {
+        Statement wear(db_.handle(),
+                       "INSERT INTO wear_history (wardrobe_item_id) VALUES (?1);");
+        wear.bindInt(1, id);
+        wear.step();
+    }
+    const int budget = wearBudget(category);
+    Statement update(db_.handle(), R"sql(
+        UPDATE wardrobe_items
+        SET wears_since_wash = wears_since_wash + 1,
+            is_dirty = CASE WHEN ?2 > 0 AND wears_since_wash + 1 >= ?2
+                            THEN 1 ELSE is_dirty END
+        WHERE id = ?1;
+    )sql");
+    update.bindInt(1, id);
+    update.bindInt(2, budget);
+    update.step();
+    return true;
+}
+
+bool WardrobeRepository::setDirty(int id, bool dirty) {
+    Statement stmt(db_.handle(),
+                   dirty ? "UPDATE wardrobe_items SET is_dirty = 1 WHERE id = ?1;"
+                         : "UPDATE wardrobe_items SET is_dirty = 0, "
+                           "wears_since_wash = 0 WHERE id = ?1;");
+    stmt.bindInt(1, id);
+    stmt.step();
+    return sqlite3_changes(db_.handle()) > 0;
+}
+
 bool WardrobeRepository::setLabel(int id, const std::string& label) {
     Statement stmt(db_.handle(), "UPDATE wardrobe_items SET label = ?1 WHERE id = ?2;");
     stmt.bindText(1, label);
@@ -151,7 +207,10 @@ std::vector<WardrobeItem> WardrobeRepository::listItems(const std::string& lang)
         SELECT w.id, i.slug, COALESCE(ti.name, i.slug),
                c.slug, COALESCE(tc.name, c.slug),
                COALESCE(w.label, ''), COALESCE(w.photo_path, ''),
-               COALESCE(w.cutout_path, '')
+               COALESCE(w.cutout_path, ''),
+               COALESCE(w.is_dirty, 0), COALESCE(w.wears_since_wash, 0),
+               COALESCE((SELECT MAX(worn_at) FROM wear_history h
+                         WHERE h.wardrobe_item_id = w.id), '')
         FROM wardrobe_items w
         JOIN clothing_items i ON i.id = w.type_id
         JOIN clothing_categories c ON c.id = i.category_id
@@ -172,6 +231,9 @@ std::vector<WardrobeItem> WardrobeRepository::listItems(const std::string& lang)
         item.label = stmt.columnText(5);
         item.photo_path = stmt.columnText(6);
         item.cutout_path = stmt.columnText(7);
+        item.is_dirty = stmt.columnInt(8) != 0;
+        item.wears_since_wash = stmt.columnInt(9);
+        item.last_worn_at = stmt.columnText(10);
         items.push_back(std::move(item));
     }
 

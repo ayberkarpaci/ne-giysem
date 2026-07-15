@@ -703,6 +703,23 @@ select:focus {
     font-size: 2.6rem;
 }
 
+/* Laundry: dirty pieces fade back and carry a basket badge. */
+.card-visual.dirty img {
+    opacity: 0.35;
+    filter: grayscale(0.6);
+}
+
+.dirty-badge {
+    position: absolute;
+    top: 0.3rem;
+    left: 0.3rem;
+    font-size: 1.1rem;
+}
+
+.worn-btn {
+    margin-bottom: 0.6rem;
+}
+
 .card-name {
     position: absolute;
     left: 0;

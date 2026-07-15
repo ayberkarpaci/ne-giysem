@@ -2,6 +2,7 @@
 
 #include <map>
 #include <optional>
+#include <random>
 #include <string>
 #include <utility>
 #include <vector>
@@ -99,14 +100,24 @@ double patternClashPenalty(const std::vector<RecommendedItem>& outfit);
 double pairAffinityBonus(const std::vector<RecommendedItem>& outfit,
                          const PairAffinities& affinities);
 
+// Real-life variety (wardrobe only): a piece worn `days` ago is penalized
+// -0.3/days — yesterday hurts, last week barely registers. A piece that
+// was never worn (nullopt) gets a small +0.05 exploration bonus instead.
+double varietyAdjustment(std::optional<double> days_since_worn);
+
 // Assembles the best outfit from per-category candidates by scoring whole
 // combinations (mean of core item scores + harmony terms + pair-affinity
 // bonus) instead of picking each category independently. Core pieces are
 // top+bottom or a one-piece, plus footwear; optional categories join when
 // their score plus the harmony change clears `optional_threshold`.
+// With an `rng`, the pick falls uniformly among combinations within
+// `tie_tolerance` of the best score, so near-tied outfits take turns;
+// without one the best combination always wins (deterministic).
 std::vector<RecommendedItem> assembleOutfit(const OutfitCandidates& candidates,
                                             double optional_threshold,
-                                            const PairAffinities& affinities = {});
+                                            const PairAffinities& affinities = {},
+                                            std::mt19937* rng = nullptr,
+                                            double tie_tolerance = 0.05);
 
 // Picks the best-scoring item per category. Core categories (top, bottom,
 // footwear) are always present; optional ones (outerwear, accessory) only

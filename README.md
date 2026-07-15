@@ -52,6 +52,10 @@ Main API endpoints (see `include/server.h` for the full list):
 - `POST /api/classify-photo` — prefill the add form from a garment photo
 - `GET /api/outfits` — recently served outfits with their pieces resolved
   against the wardrobe; the lookbook's OUTFITS tab is built from this
+- `POST /api/recommendations/{id}/worn` — "I wore this": logs a wear for
+  every wardrobe piece of the outfit (feeds variety and the laundry state)
+- `PUT /api/wardrobe/{id}/laundry` — move an item in/out of the laundry
+  basket; dirty items sit out of suggestions until washed
 - `PUT /api/wardrobe/{id}` — rename an item (the detail panel's name field)
 - `POST /api/wardrobe/{id}/extract` — turn the item's photo into a catalog
   cutout (transparent PNG). By default this runs [rembg](https://github.com/danielgatis/rembg)

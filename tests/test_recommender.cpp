@@ -2,12 +2,15 @@
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 
 #include <algorithm>
+#include <random>
+#include <set>
 #include <string>
 #include <vector>
 
 #include "database.h"
 #include "recommender.h"
 #include "seed.h"
+#include "wardrobe.h"
 
 using negiysem::Database;
 using negiysem::RecommendationRequest;
@@ -377,4 +380,64 @@ TEST_CASE("assembleOutfit prefers a remembered pair over a slightly better item"
     const negiysem::PairAffinities memory = {{{"jeans", "t-shirt"}, 3}};
     const auto remembered = negiysem::assembleOutfit(candidates, 0.8, memory);
     CHECK(findCategory(remembered, "top")->item_slug == "t-shirt");
+}
+
+TEST_CASE("varietyAdjustment: recent wears step back, new pieces step up") {
+    CHECK_THAT(negiysem::varietyAdjustment(std::nullopt), WithinAbs(0.05, 1e-9));
+    CHECK_THAT(negiysem::varietyAdjustment(0.2), WithinAbs(-0.3, 1e-9));  // today
+    CHECK_THAT(negiysem::varietyAdjustment(3.0), WithinAbs(-0.1, 1e-9));
+    CHECK_THAT(negiysem::varietyAdjustment(30.0), WithinAbs(-0.01, 1e-9));
+}
+
+TEST_CASE("dirty pieces sit out, and wearing one just now demotes it") {
+    negiysem::Database db = []() {
+        negiysem::Database d(":memory:");
+        d.initSchema();
+        negiysem::seedDatabase(d);
+        return d;
+    }();
+    negiysem::WardrobeRepository wardrobe(db);
+    const int tee_a = wardrobe.addItem("t-shirt", "tee A", {"white"});
+    const int tee_b = wardrobe.addItem("t-shirt", "tee B", {"white"});
+    wardrobe.addItem("jeans", "", {"blue"});
+
+    negiysem::RecommendationRequest request;
+    request.temperature_c = 22.0;
+    const negiysem::Recommender recommender(db);
+
+    // Wearing tee A today pushes it below the otherwise identical tee B.
+    wardrobe.recordWear(tee_a);
+    auto candidates = recommender.candidatesFromWardrobe(request, 3);
+    REQUIRE(candidates["top"].size() == 2);
+    CHECK(candidates["top"][0].wardrobe_id == tee_b);
+
+    // Once its budget is gone the piece disappears from candidates entirely.
+    wardrobe.recordWear(tee_a);  // tops go dirty on the second wear
+    candidates = recommender.candidatesFromWardrobe(request, 3);
+    REQUIRE(candidates["top"].size() == 1);
+    CHECK(candidates["top"][0].wardrobe_id == tee_b);
+}
+
+TEST_CASE("assembleOutfit with an rng lets near-tied outfits take turns") {
+    negiysem::OutfitCandidates candidates;
+    candidates["top"] = {piece("blazer", "top", 1.0), piece("t-shirt", "top", 0.98)};
+    candidates["bottom"] = {piece("jeans", "bottom", 1.0)};
+
+    std::set<std::string> tops_seen;
+    for (unsigned seed = 0; seed < 24; ++seed) {
+        std::mt19937 rng(seed);
+        const auto outfit = negiysem::assembleOutfit(candidates, 0.8, {}, &rng);
+        tops_seen.insert(findCategory(outfit, "top")->item_slug);
+    }
+    CHECK(tops_seen.size() == 2);  // both near-tied tops got their day
+
+    // A distant runner-up (outside the tolerance) never wins.
+    candidates["top"][1].score = 0.5;
+    tops_seen.clear();
+    for (unsigned seed = 0; seed < 24; ++seed) {
+        std::mt19937 rng(seed);
+        const auto outfit = negiysem::assembleOutfit(candidates, 0.8, {}, &rng);
+        tops_seen.insert(findCategory(outfit, "top")->item_slug);
+    }
+    CHECK(tops_seen == std::set<std::string>{"blazer"});
 }

@@ -21,6 +21,9 @@ struct StoredRecommendation {
     bool is_raining = false;
     std::string lang;
     std::vector<std::string> item_slugs;  // the outfit's catalog type slugs
+    // The user's own pieces in the outfit (only those that came from the
+    // wardrobe), so "I wore this" can log them.
+    std::vector<int> wardrobe_item_ids;
 };
 
 // One piece of a saved outfit, resolved against the wardrobe when the

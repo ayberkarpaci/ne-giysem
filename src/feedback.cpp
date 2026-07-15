@@ -221,11 +221,14 @@ std::optional<StoredRecommendation> FeedbackRepository::recommendation(int id) c
         stored.lang = stmt.columnText(5);
     }
     Statement items(db,
-                    "SELECT item_slug FROM recommendation_items "
-                    "WHERE recommendation_id = ?1;");
+                    "SELECT item_slug, COALESCE(wardrobe_item_id, 0) "
+                    "FROM recommendation_items WHERE recommendation_id = ?1;");
     items.bindInt(1, id);
     while (items.step()) {
         stored.item_slugs.push_back(items.columnText(0));
+        if (const int wardrobe_id = items.columnInt(1); wardrobe_id > 0) {
+            stored.wardrobe_item_ids.push_back(wardrobe_id);
+        }
     }
     return stored;
 }

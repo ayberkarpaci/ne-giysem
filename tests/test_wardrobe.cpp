@@ -199,3 +199,32 @@ TEST_CASE("cutout path round-trips and dies with the photo it came from") {
 
     CHECK_FALSE(repo.cutoutPath(9999).has_value());
 }
+
+TEST_CASE("wearing a piece uses up its category's wear budget") {
+    Database db = makeSeededDb();
+    WardrobeRepository repo(db);
+    const int tee = repo.addItem("t-shirt", "", {"white"});
+    const int sneakers = repo.addItem("sneakers", "", {"white"});
+
+    // Tops go dirty after two wears...
+    CHECK(repo.recordWear(tee));
+    CHECK_FALSE(repo.listItems("en")[1].is_dirty);
+    CHECK(repo.recordWear(tee));
+    auto items = repo.listItems("en");
+    const auto& worn_tee = items[1];  // newest first: sneakers, tee
+    CHECK(worn_tee.is_dirty);
+    CHECK(worn_tee.wears_since_wash == 2);
+    CHECK_FALSE(worn_tee.last_worn_at.empty());
+
+    // ...footwear never does.
+    for (int i = 0; i < 6; ++i) repo.recordWear(sneakers);
+    CHECK_FALSE(repo.listItems("en")[0].is_dirty);
+
+    // Washing resets the budget.
+    CHECK(repo.setDirty(tee, false));
+    const auto washed_items = repo.listItems("en");
+    CHECK_FALSE(washed_items[1].is_dirty);
+    CHECK(washed_items[1].wears_since_wash == 0);
+
+    CHECK_FALSE(repo.recordWear(9999));
+}

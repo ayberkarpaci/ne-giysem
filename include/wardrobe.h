@@ -24,6 +24,9 @@ struct WardrobeItem {
     std::string label;        // user-given name, may be empty
     std::string photo_path;   // file name under data/photos/, may be empty
     std::string cutout_path;  // file name under data/photos/cutouts/, may be empty
+    bool is_dirty = false;    // in the laundry basket, excluded from outfits
+    int wears_since_wash = 0;
+    std::string last_worn_at;  // "YYYY-MM-DD HH:MM:SS" UTC, empty = never
     std::vector<WardrobeValue> values;
 };
 
@@ -65,6 +68,15 @@ public:
     std::optional<std::string> photoPath(int id) const;
     void setCutoutPath(int id, const std::string& file_name);
     std::optional<std::string> cutoutPath(int id) const;
+
+    // "I wore this": appends to wear_history and bumps wears_since_wash;
+    // the piece goes dirty automatically once its category's wear budget
+    // (tops 2, bottoms 4, outerwear 8; footwear & co never) is used up.
+    // Returns false when the id is unknown.
+    bool recordWear(int id);
+
+    // Laundry basket: marking clean also resets the wear budget.
+    bool setDirty(int id, bool dirty);
 
     std::vector<WardrobeItem> listItems(const std::string& lang) const;
     int count() const;

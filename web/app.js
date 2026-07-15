@@ -98,6 +98,14 @@ const STRINGS = {
         name_saved: "Saved ✓",
         mood_tag: (name) => name,
         outfit_desc_fallback: "Put together for your weather and mood.",
+        worn_button: "👕 I wore this",
+        worn_thanks: (n) => `Noted — ${n} piece${n === 1 ? "" : "s"} logged.`,
+        worn_error: "Could not log the wear.",
+        mark_dirty: "🧺 To the laundry",
+        mark_clean: "✨ Washed & clean",
+        dirty_note: "In the laundry — left out of outfit suggestions.",
+        last_worn: (date) => `Last worn: ${date}`,
+        never_worn: "Not worn yet.",
         why_title: "What was off? (optional)",
         "tag_too-hot": "🥵 Too warm",
         "tag_too-cold": "🥶 Too cold",
@@ -205,6 +213,14 @@ const STRINGS = {
         name_saved: "Kaydedildi ✓",
         mood_tag: (name) => name,
         outfit_desc_fallback: "Havana ve ruh hâline göre bir araya getirildi.",
+        worn_button: "👕 Bunu giydim",
+        worn_thanks: (n) => `Not edildi — ${n} parça kaydedildi.`,
+        worn_error: "Giyme kaydedilemedi.",
+        mark_dirty: "🧺 Kirliye at",
+        mark_clean: "✨ Yıkandı, temiz",
+        dirty_note: "Kirli sepetinde — kombin önerilerine girmiyor.",
+        last_worn: (date) => `Son giyilme: ${date}`,
+        never_worn: "Henüz giyilmedi.",
         why_title: "Sorun neydi? (isteğe bağlı)",
         "tag_too-hot": "🥵 Fazla terletir",
         "tag_too-cold": "🥶 Üşütür",
@@ -470,6 +486,31 @@ function appendFeedbackWidget(box, recommendationId, listId) {
         return p;
     };
     const widget = document.createElement("div");
+
+    // "I wore this" logs a wear for every wardrobe piece in the outfit,
+    // which feeds variety and the laundry state.
+    const worn = document.createElement("button");
+    worn.type = "button";
+    worn.className = "ghost-btn worn-btn";
+    worn.textContent = t("worn_button");
+    worn.addEventListener("click", async () => {
+        worn.disabled = true;
+        try {
+            const data = await fetchJson(`/api/recommendations/${recommendationId}/worn`,
+                                         { method: "POST" });
+            const thanks = document.createElement("p");
+            thanks.className = "note";
+            thanks.textContent = t("worn_thanks")(data.worn);
+            worn.replaceWith(thanks);
+            await loadWardrobe();  // dirty badges may have appeared
+        } catch (err) {
+            console.error(err);
+            worn.disabled = false;
+            showError(t("worn_error"));
+        }
+    });
+    widget.appendChild(worn);
+
     widget.appendChild(note("rate_title"));
 
     let rating = 0;
@@ -916,6 +957,7 @@ function wardrobeCard(item) {
 
     const visual = document.createElement("div");
     visual.className = "card-visual";
+    if (item.is_dirty) visual.classList.add("dirty");
     if (item.cutout_url || item.photo_url) {
         visual.classList.add(item.cutout_url ? "cutout" : "photo");
         const img = document.createElement("img");
@@ -926,6 +968,13 @@ function wardrobeCard(item) {
     } else {
         visual.classList.add("emoji");
         visual.textContent = CATEGORY_EMOJI[item.category_slug] || "👔";
+    }
+    if (item.is_dirty) {
+        const badge = document.createElement("span");
+        badge.className = "dirty-badge";
+        badge.textContent = "🧺";
+        badge.title = t("dirty_note");
+        li.appendChild(badge);
     }
 
     const name = document.createElement("span");
@@ -1146,6 +1195,40 @@ async function openItemPanel(item) {
         none.textContent = t("panel_no_details");
         details.appendChild(none);
     }
+
+    // Laundry: wear info + a dirty/clean toggle.
+    const laundry = panelSection(panel, "");
+    const wornLine = document.createElement("p");
+    wornLine.className = "note";
+    wornLine.textContent = item.last_worn_at
+        ? t("last_worn")(item.last_worn_at.slice(0, 10))
+        : t("never_worn");
+    laundry.appendChild(wornLine);
+    if (item.is_dirty) {
+        const dirtyNote = document.createElement("p");
+        dirtyNote.className = "note";
+        dirtyNote.textContent = `🧺 ${t("dirty_note")}`;
+        laundry.appendChild(dirtyNote);
+    }
+    const laundryBtn = document.createElement("button");
+    laundryBtn.className = "ghost-btn";
+    laundryBtn.textContent = item.is_dirty ? t("mark_clean") : t("mark_dirty");
+    laundryBtn.addEventListener("click", async () => {
+        try {
+            await fetchJson(`/api/wardrobe/${item.id}/laundry`, {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ dirty: !item.is_dirty }),
+            });
+            item.is_dirty = !item.is_dirty;
+            await loadWardrobe();
+            openItemPanel(item);  // repaint the panel with the new state
+        } catch (err) {
+            console.error(err);
+            showError(t("error"), "wardrobe-error");
+        }
+    });
+    laundry.appendChild(laundryBtn);
 
     const danger = document.createElement("div");
     danger.className = "panel-danger";

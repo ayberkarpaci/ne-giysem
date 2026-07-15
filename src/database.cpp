@@ -79,7 +79,16 @@ CREATE TABLE IF NOT EXISTS wardrobe_items (
     label      TEXT,                     -- optional user-given name
     photo_path TEXT,                     -- file name under data/photos/
     cutout_path TEXT,                    -- transparent PNG under data/photos/cutouts/
-    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    is_dirty   INTEGER NOT NULL DEFAULT 0,   -- in the laundry basket
+    wears_since_wash INTEGER NOT NULL DEFAULT 0
+);
+
+-- Every time the user actually wore a piece ("I wore this").
+CREATE TABLE IF NOT EXISTS wear_history (
+    id               INTEGER PRIMARY KEY,
+    wardrobe_item_id INTEGER NOT NULL REFERENCES wardrobe_items(id) ON DELETE CASCADE,
+    worn_at          TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
 CREATE TABLE IF NOT EXISTS wardrobe_item_attributes (
@@ -185,6 +194,15 @@ void Database::initSchema() {
     }
     try {
         execute("ALTER TABLE recommendation_items ADD COLUMN wardrobe_item_id INTEGER;");
+    } catch (const std::runtime_error&) {
+    }
+    try {
+        execute("ALTER TABLE wardrobe_items ADD COLUMN is_dirty INTEGER NOT NULL DEFAULT 0;");
+    } catch (const std::runtime_error&) {
+    }
+    try {
+        execute("ALTER TABLE wardrobe_items ADD COLUMN wears_since_wash INTEGER NOT NULL "
+                "DEFAULT 0;");
     } catch (const std::runtime_error&) {
     }
 }

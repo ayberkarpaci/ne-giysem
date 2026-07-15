@@ -522,6 +522,9 @@ bool Server::run(int port) {
                     {"photo_url", item.photo_path.empty() ? "" : "/photos/" + item.photo_path},
                     {"cutout_url",
                      item.cutout_path.empty() ? "" : "/photos/" + item.cutout_path},
+                    {"is_dirty", item.is_dirty},
+                    {"wears_since_wash", item.wears_since_wash},
+                    {"last_worn_at", item.last_worn_at},
                     {"values", values},
                 });
             }
@@ -587,6 +590,53 @@ bool Server::run(int port) {
             res.set_content(json{{"outfits", outfits}}.dump(), "application/json");
         } catch (const std::exception& e) {
             res.status = 500;
+            res.set_content(json{{"error", e.what()}}.dump(), "application/json");
+        }
+    });
+
+    // "I wore this": log a wear for every wardrobe piece of the outfit.
+    // Pieces go dirty automatically once their category's wear budget is
+    // used up, and recent wears are penalized for variety.
+    server.Post(R"(/api/recommendations/(\d+)/worn)",
+                [this](const httplib::Request& req, httplib::Response& res) {
+        try {
+            const int id = std::stoi(req.matches[1]);
+            const auto stored = FeedbackRepository(db_).recommendation(id);
+            if (!stored) {
+                res.status = 404;
+                res.set_content(json{{"error", "no such recommendation"}}.dump(),
+                                "application/json");
+                return;
+            }
+            WardrobeRepository repo(db_);
+            int worn = 0;
+            for (const int wardrobe_id : stored->wardrobe_item_ids) {
+                if (repo.recordWear(wardrobe_id)) worn += 1;
+            }
+            res.set_content(json{{"worn", worn}}.dump(), "application/json");
+        } catch (const std::exception& e) {
+            res.status = 400;
+            res.set_content(json{{"error", e.what()}}.dump(), "application/json");
+        }
+    });
+
+    // Laundry basket: {"dirty": true|false}; clean resets the wear budget.
+    server.Put(R"(/api/wardrobe/(\d+)/laundry)",
+               [this](const httplib::Request& req, httplib::Response& res) {
+        try {
+            const int id = std::stoi(req.matches[1]);
+            const json body = json::parse(req.body);
+            const bool dirty = body.at("dirty").get<bool>();
+            if (!WardrobeRepository(db_).setDirty(id, dirty)) {
+                res.status = 404;
+                res.set_content(json{{"error", "no such wardrobe item"}}.dump(),
+                                "application/json");
+                return;
+            }
+            res.set_content(json{{"id", id}, {"is_dirty", dirty}}.dump(),
+                            "application/json");
+        } catch (const std::exception& e) {
+            res.status = 400;
             res.set_content(json{{"error", e.what()}}.dump(), "application/json");
         }
     });

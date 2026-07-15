@@ -190,8 +190,27 @@ JOIN clothing_categories c ON c.id = i.category_id
 LEFT JOIN translations ti
        ON ti.entity_type = 'item' AND ti.entity_id = i.id AND ti.lang_code = ?1
 LEFT JOIN translations tc
-       ON tc.entity_type = 'category' AND tc.entity_id = c.id AND tc.lang_code = ?1;
+       ON tc.entity_type = 'category' AND tc.entity_id = c.id AND tc.lang_code = ?1
+WHERE COALESCE(w.is_dirty, 0) = 0;
 )sql";
+
+// Days since each wardrobe piece was last worn, from wear_history.
+std::map<int, double> loadDaysSinceWorn(sqlite3* db) {
+    constexpr const char* kQuery = R"sql(
+        SELECT wardrobe_item_id, julianday('now') - julianday(MAX(worn_at))
+        FROM wear_history GROUP BY wardrobe_item_id;
+    )sql";
+    sqlite3_stmt* stmt = nullptr;
+    if (sqlite3_prepare_v2(db, kQuery, -1, &stmt, nullptr) != SQLITE_OK) {
+        throw std::runtime_error(std::string("prepare failed: ") + sqlite3_errmsg(db));
+    }
+    std::map<int, double> days;
+    while (sqlite3_step(stmt) == SQLITE_ROW) {
+        days[sqlite3_column_int(stmt, 0)] = sqlite3_column_double(stmt, 1);
+    }
+    sqlite3_finalize(stmt);
+    return days;
+}
 
 // Reads the shared columns and computes the score. Extra columns (if any)
 // are the caller's business.
@@ -278,6 +297,11 @@ double patternClashPenalty(const std::vector<RecommendedItem>& outfit) {
     return -0.25 * std::max(0, bold - 1);
 }
 
+double varietyAdjustment(std::optional<double> days_since_worn) {
+    if (!days_since_worn) return 0.05;  // never worn: nudge it into rotation
+    return -0.3 / std::max(1.0, *days_since_worn);
+}
+
 double pairAffinityBonus(const std::vector<RecommendedItem>& outfit,
                          const PairAffinities& affinities) {
     if (affinities.empty()) return 0.0;
@@ -326,7 +350,9 @@ const std::vector<RecommendedItem>& candidatesFor(const OutfitCandidates& candid
 
 std::vector<RecommendedItem> assembleOutfit(const OutfitCandidates& candidates,
                                             double optional_threshold,
-                                            const PairAffinities& affinities) {
+                                            const PairAffinities& affinities,
+                                            std::mt19937* rng,
+                                            double tie_tolerance) {
     const auto& tops = candidatesFor(candidates, "top");
     const auto& bottoms = candidatesFor(candidates, "bottom");
     const auto& one_pieces = candidatesFor(candidates, "one-piece");
@@ -346,25 +372,37 @@ std::vector<RecommendedItem> assembleOutfit(const OutfitCandidates& candidates,
     for (const auto& piece : one_pieces) bases.push_back({piece});
     if (bases.empty()) bases.push_back({});
 
-    std::vector<RecommendedItem> best;
-    double best_score = -1e9;
+    // Score every combination first; the winner is picked afterwards so
+    // near-ties can take turns when an rng is provided.
+    std::vector<std::pair<std::vector<RecommendedItem>, double>> combos;
     for (const auto& base : bases) {
         if (shoes.empty()) {
-            if (comboScore(base, affinities) > best_score && !base.empty()) {
-                best_score = comboScore(base, affinities);
-                best = base;
-            }
+            if (!base.empty()) combos.emplace_back(base, comboScore(base, affinities));
             continue;
         }
         for (const auto& shoe : shoes) {
             std::vector<RecommendedItem> combo = base;
             combo.push_back(shoe);
             const double score = comboScore(combo, affinities);
-            if (score > best_score) {
-                best_score = score;
-                best = std::move(combo);
-            }
+            combos.emplace_back(std::move(combo), score);
         }
+    }
+
+    std::vector<RecommendedItem> best;
+    double best_score = -1e9;
+    for (const auto& [combo, score] : combos) {
+        if (score > best_score) {
+            best_score = score;
+            best = combo;
+        }
+    }
+    if (rng != nullptr && !combos.empty()) {
+        std::vector<const std::vector<RecommendedItem>*> near_best;
+        for (const auto& [combo, score] : combos) {
+            if (score >= best_score - tie_tolerance) near_best.push_back(&combo);
+        }
+        std::uniform_int_distribution<size_t> pick(0, near_best.size() - 1);
+        best = *near_best[pick(*rng)];
     }
 
     // Optional layers join only when they earn their place: their own score
@@ -424,8 +462,11 @@ std::vector<RecommendedItem> Recommender::recommend(const RecommendationRequest&
 
 std::vector<RecommendedItem> Recommender::recommendFromWardrobe(
     const RecommendationRequest& request) const {
+    // The user's own wardrobe gets variety: outfits within a whisker of the
+    // best take turns instead of the same winner every day.
+    std::mt19937 rng(std::random_device{}());
     return assembleOutfit(candidatesFromWardrobe(request, 3), kOptionalCategoryThreshold,
-                          FeedbackRepository(db_).pairAffinities());
+                          FeedbackRepository(db_).pairAffinities(), &rng);
 }
 
 OutfitCandidates Recommender::candidates(const RecommendationRequest& request,
@@ -461,6 +502,7 @@ OutfitCandidates Recommender::candidatesFromWardrobe(const RecommendationRequest
     const auto affinities = loadAffinities(db);
     const auto ratings = FeedbackRepository(db_).averageRatings();
     const auto temp_offsets = FeedbackRepository(db_).temperatureOffsets();
+    const auto days_since_worn = loadDaysSinceWorn(db);
 
     sqlite3_stmt* stmt = nullptr;
     if (sqlite3_prepare_v2(db, kWardrobeQuery.c_str(), -1, &stmt, nullptr) != SQLITE_OK) {
@@ -504,6 +546,11 @@ OutfitCandidates Recommender::candidatesFromWardrobe(const RecommendationRequest
         if (isExcluded(request, item.item_slug)) continue;
         applyFeedback(item, ratings);
         item.wardrobe_id = sqlite3_column_int(stmt, 9);
+        // Variety: pieces worn recently step back, never-worn ones step up.
+        const auto worn_it = days_since_worn.find(item.wardrobe_id);
+        item.score += varietyAdjustment(
+            worn_it == days_since_worn.end() ? std::nullopt
+                                             : std::optional<double>(worn_it->second));
         const std::string label = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 10));
         item.photo_path = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 11));
         item.cutout_path = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 12));
