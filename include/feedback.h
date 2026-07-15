@@ -84,6 +84,14 @@ public:
     // the smaller slug first.
     PairAffinities pairAffinities(int min_rating = 4) const;
 
+    // Shifts the personal comfort range of each given type by `delta_c`
+    // degrees ('too hot' feedback passes a negative delta). Cumulative
+    // across calls, clamped to [-5, 5].
+    void nudgeTemperature(const std::vector<std::string>& item_slugs, double delta_c);
+
+    // The accumulated per-type comfort shifts, keyed by catalog type slug.
+    std::map<std::string, double> temperatureOffsets() const;
+
 private:
     Database& db_;
 };

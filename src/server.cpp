@@ -1003,6 +1003,16 @@ bool Server::run(int port) {
                 return std::find(tags.begin(), tags.end(), tag) != tags.end();
             };
 
+            // Temperature calibration (roadmap 1.5): 'too hot' teaches us the
+            // outfit's types suit colder days than the catalog thinks, so
+            // their comfort ranges shift down half a degree (and vice versa).
+            if (tagged("too-hot") || tagged("too-cold")) {
+                if (const auto stored = repo.recommendation(id)) {
+                    repo.nudgeTemperature(stored->item_slugs,
+                                          tagged("too-hot") ? -0.5 : 0.5);
+                }
+            }
+
             json response = {{"ok", true}};
             // A poor rating earns an immediate alternative: same context,
             // but with everything from the disliked outfit left out.

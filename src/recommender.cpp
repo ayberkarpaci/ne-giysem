@@ -198,7 +198,8 @@ LEFT JOIN translations tc
 RecommendedItem readScoredItem(sqlite3_stmt* stmt,
                                const RecommendationRequest& request,
                                const std::map<int, std::map<std::string, double>>& affinities,
-                               const std::vector<std::pair<std::string, double>>& mood_weights) {
+                               const std::vector<std::pair<std::string, double>>& mood_weights,
+                               const std::map<std::string, double>& temp_offsets) {
     std::optional<double> min_c;
     std::optional<double> max_c;
     if (sqlite3_column_type(stmt, 2) != SQLITE_NULL) {
@@ -214,6 +215,14 @@ RecommendedItem readScoredItem(sqlite3_stmt* stmt,
     RecommendedItem item;
     item.item_slug = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 0));
     item.category_slug = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1));
+
+    // Personal calibration: repeated 'too hot/cold' feedback shifts this
+    // type's comfort range for this user.
+    const auto offset_it = temp_offsets.find(item.item_slug);
+    if (offset_it != temp_offsets.end()) {
+        if (min_c) *min_c += offset_it->second;
+        if (max_c) *max_c += offset_it->second;
+    }
     item.item_name = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 6));
     item.category_name = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 7));
     item.formality = sqlite3_column_int(stmt, 8);
@@ -425,6 +434,7 @@ OutfitCandidates Recommender::candidates(const RecommendationRequest& request,
     const auto mood_weights = resolveMoodWeights(db, request);
     const auto affinities = loadAffinities(db);
     const auto ratings = FeedbackRepository(db_).averageRatings();
+    const auto temp_offsets = FeedbackRepository(db_).temperatureOffsets();
 
     sqlite3_stmt* stmt = nullptr;
     if (sqlite3_prepare_v2(db, kItemQuery.c_str(), -1, &stmt, nullptr) != SQLITE_OK) {
@@ -435,7 +445,7 @@ OutfitCandidates Recommender::candidates(const RecommendationRequest& request,
 
     OutfitCandidates by_category;
     while (sqlite3_step(stmt) == SQLITE_ROW) {
-        RecommendedItem item = readScoredItem(stmt, request, affinities, mood_weights);
+        RecommendedItem item = readScoredItem(stmt, request, affinities, mood_weights, temp_offsets);
         if (isExcluded(request, item.item_slug)) continue;
         applyFeedback(item, ratings);
         insertCandidate(by_category, std::move(item), limit);
@@ -450,6 +460,7 @@ OutfitCandidates Recommender::candidatesFromWardrobe(const RecommendationRequest
     const auto mood_weights = resolveMoodWeights(db, request);
     const auto affinities = loadAffinities(db);
     const auto ratings = FeedbackRepository(db_).averageRatings();
+    const auto temp_offsets = FeedbackRepository(db_).temperatureOffsets();
 
     sqlite3_stmt* stmt = nullptr;
     if (sqlite3_prepare_v2(db, kWardrobeQuery.c_str(), -1, &stmt, nullptr) != SQLITE_OK) {
@@ -489,7 +500,7 @@ OutfitCandidates Recommender::candidatesFromWardrobe(const RecommendationRequest
 
     OutfitCandidates by_category;
     while (sqlite3_step(stmt) == SQLITE_ROW) {
-        RecommendedItem item = readScoredItem(stmt, request, affinities, mood_weights);
+        RecommendedItem item = readScoredItem(stmt, request, affinities, mood_weights, temp_offsets);
         if (isExcluded(request, item.item_slug)) continue;
         applyFeedback(item, ratings);
         item.wardrobe_id = sqlite3_column_int(stmt, 9);

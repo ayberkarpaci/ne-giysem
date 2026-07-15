@@ -221,3 +221,20 @@ TEST_CASE("pairAffinities counts pairs from well-rated outfits only") {
     repo.addFeedback(loved, 4, "");
     CHECK(repo.pairAffinities().at({"jeans", "t-shirt"}) == 2);
 }
+
+TEST_CASE("temperature offsets accumulate in bounded half-degree steps") {
+    Database db = makeSeededDb();
+    FeedbackRepository repo(db);
+
+    repo.nudgeTemperature({"t-shirt", "jeans"}, -0.5);
+    repo.nudgeTemperature({"t-shirt"}, -0.5);
+    auto offsets = repo.temperatureOffsets();
+    CHECK_THAT(offsets.at("t-shirt"), WithinAbs(-1.0, 1e-9));
+    CHECK_THAT(offsets.at("jeans"), WithinAbs(-0.5, 1e-9));
+
+    // The shift never runs away: bounded to [-5, 5].
+    for (int i = 0; i < 30; ++i) repo.nudgeTemperature({"t-shirt"}, -0.5);
+    CHECK_THAT(repo.temperatureOffsets().at("t-shirt"), WithinAbs(-5.0, 1e-9));
+    for (int i = 0; i < 30; ++i) repo.nudgeTemperature({"t-shirt"}, 0.5);
+    CHECK_THAT(repo.temperatureOffsets().at("t-shirt"), WithinAbs(5.0, 1e-9));
+}

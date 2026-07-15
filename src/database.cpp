@@ -123,6 +123,13 @@ CREATE TABLE IF NOT EXISTS feedback_tags (
     tag         TEXT NOT NULL,
     PRIMARY KEY (feedback_id, tag)
 );
+
+-- Personal comfort calibration: 'too hot/cold' feedback shifts a type's
+-- comfort temperature range by this many degrees for this user.
+CREATE TABLE IF NOT EXISTS type_temp_offsets (
+    item_slug TEXT PRIMARY KEY,          -- clothing_items catalog slug
+    offset_c  REAL NOT NULL DEFAULT 0    -- bounded to [-5, 5]
+);
 )sql";
 
 }  // namespace

@@ -23,8 +23,10 @@ the phases below move harmony, formality and learning into our own algorithm.
   recommendations (items that shine together get a pair bonus in 1.2):
   +0.05 per >= 4-star co-occurrence, capped at 0.15 per pair, applied in
   combination scoring.
-- [ ] **1.5 Temperature auto-calibration** — "too hot/cold" feedback nudges a
-  per-type personal offset on the comfort range (bounded, cumulative).
+- [x] **1.5 Temperature auto-calibration** — "too hot/cold" feedback nudges a
+  per-type personal offset on the comfort range (`type_temp_offsets`):
+  ±0.5 °C per tagged rating, cumulative, bounded to ±5 °C, applied when
+  scoring temperature fit.
 
 ## Phase 2 — Real-life state
 

@@ -248,6 +248,30 @@ PairAffinities FeedbackRepository::pairAffinities(int min_rating) const {
     return affinities;
 }
 
+void FeedbackRepository::nudgeTemperature(const std::vector<std::string>& item_slugs,
+                                          double delta_c) {
+    for (const auto& slug : item_slugs) {
+        Statement stmt(db_.handle(), R"sql(
+            INSERT INTO type_temp_offsets (item_slug, offset_c)
+            VALUES (?1, MAX(-5.0, MIN(5.0, ?2)))
+            ON CONFLICT(item_slug) DO UPDATE
+            SET offset_c = MAX(-5.0, MIN(5.0, offset_c + ?2));
+        )sql");
+        stmt.bindText(1, slug);
+        stmt.bindDouble(2, delta_c);
+        stmt.step();
+    }
+}
+
+std::map<std::string, double> FeedbackRepository::temperatureOffsets() const {
+    Statement stmt(db_.handle(), "SELECT item_slug, offset_c FROM type_temp_offsets;");
+    std::map<std::string, double> offsets;
+    while (stmt.step()) {
+        offsets[stmt.columnText(0)] = stmt.columnDouble(1);
+    }
+    return offsets;
+}
+
 std::map<std::string, double> FeedbackRepository::averageRatings() const {
     Statement stmt(db_.handle(), R"sql(
         SELECT ri.item_slug, AVG(f.rating)
