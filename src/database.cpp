@@ -78,6 +78,7 @@ CREATE TABLE IF NOT EXISTS wardrobe_items (
     type_id    INTEGER NOT NULL REFERENCES clothing_items(id),
     label      TEXT,                     -- optional user-given name
     photo_path TEXT,                     -- file name under data/photos/
+    cutout_path TEXT,                    -- transparent PNG under data/photos/cutouts/
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -96,12 +97,14 @@ CREATE TABLE IF NOT EXISTS recommendations (
     mood_slug     TEXT,
     temperature_c REAL,
     is_raining    INTEGER NOT NULL DEFAULT 0,
-    lang          TEXT
+    lang          TEXT,
+    explanation   TEXT                 -- the stylist's one-sentence reason
 );
 
 CREATE TABLE IF NOT EXISTS recommendation_items (
     recommendation_id INTEGER NOT NULL REFERENCES recommendations(id) ON DELETE CASCADE,
-    item_slug         TEXT NOT NULL    -- catalog type slug of the suggested piece
+    item_slug         TEXT NOT NULL,   -- catalog type slug of the suggested piece
+    wardrobe_item_id  INTEGER          -- the user's own piece, when one was used
 );
 
 -- The user's verdict on a served outfit; the recommender learns from it.
@@ -111,6 +114,14 @@ CREATE TABLE IF NOT EXISTS recommendation_feedback (
     rating            INTEGER NOT NULL CHECK (rating BETWEEN 1 AND 5),
     comment           TEXT,
     created_at        TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- One-tap reasons attached to a rating ('too-hot', 'colors-clash', ...);
+-- the controlled vocabulary lives in kFeedbackTags (feedback.cpp).
+CREATE TABLE IF NOT EXISTS feedback_tags (
+    feedback_id INTEGER NOT NULL REFERENCES recommendation_feedback(id) ON DELETE CASCADE,
+    tag         TEXT NOT NULL,
+    PRIMARY KEY (feedback_id, tag)
 );
 )sql";
 
@@ -155,6 +166,18 @@ void Database::initSchema() {
     try {
         execute("ALTER TABLE clothing_items ADD COLUMN formality INTEGER NOT NULL "
                 "DEFAULT 2;");
+    } catch (const std::runtime_error&) {
+    }
+    try {
+        execute("ALTER TABLE wardrobe_items ADD COLUMN cutout_path TEXT;");
+    } catch (const std::runtime_error&) {
+    }
+    try {
+        execute("ALTER TABLE recommendations ADD COLUMN explanation TEXT;");
+    } catch (const std::runtime_error&) {
+    }
+    try {
+        execute("ALTER TABLE recommendation_items ADD COLUMN wardrobe_item_id INTEGER;");
     } catch (const std::runtime_error&) {
     }
 }

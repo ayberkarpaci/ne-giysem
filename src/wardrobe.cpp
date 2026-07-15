@@ -98,8 +98,18 @@ bool WardrobeRepository::removeItem(int id) {
     return sqlite3_changes(db_.handle()) > 0;
 }
 
+bool WardrobeRepository::setLabel(int id, const std::string& label) {
+    Statement stmt(db_.handle(), "UPDATE wardrobe_items SET label = ?1 WHERE id = ?2;");
+    stmt.bindText(1, label);
+    stmt.bindInt(2, id);
+    stmt.step();
+    return sqlite3_changes(db_.handle()) > 0;
+}
+
 void WardrobeRepository::setPhotoPath(int id, const std::string& file_name) {
-    Statement stmt(db_.handle(), "UPDATE wardrobe_items SET photo_path = ?1 WHERE id = ?2;");
+    Statement stmt(db_.handle(),
+                   "UPDATE wardrobe_items SET photo_path = ?1, cutout_path = NULL "
+                   "WHERE id = ?2;");
     stmt.bindText(1, file_name);
     stmt.bindInt(2, id);
     stmt.step();
@@ -107,6 +117,21 @@ void WardrobeRepository::setPhotoPath(int id, const std::string& file_name) {
 
 std::optional<std::string> WardrobeRepository::photoPath(int id) const {
     Statement stmt(db_.handle(), "SELECT COALESCE(photo_path, '') FROM wardrobe_items WHERE id = ?1;");
+    stmt.bindInt(1, id);
+    if (!stmt.step()) return std::nullopt;
+    return stmt.columnText(0);
+}
+
+void WardrobeRepository::setCutoutPath(int id, const std::string& file_name) {
+    Statement stmt(db_.handle(), "UPDATE wardrobe_items SET cutout_path = ?1 WHERE id = ?2;");
+    stmt.bindText(1, file_name);
+    stmt.bindInt(2, id);
+    stmt.step();
+}
+
+std::optional<std::string> WardrobeRepository::cutoutPath(int id) const {
+    Statement stmt(db_.handle(),
+                   "SELECT COALESCE(cutout_path, '') FROM wardrobe_items WHERE id = ?1;");
     stmt.bindInt(1, id);
     if (!stmt.step()) return std::nullopt;
     return stmt.columnText(0);
@@ -125,7 +150,8 @@ std::vector<WardrobeItem> WardrobeRepository::listItems(const std::string& lang)
     Statement stmt(db, R"sql(
         SELECT w.id, i.slug, COALESCE(ti.name, i.slug),
                c.slug, COALESCE(tc.name, c.slug),
-               COALESCE(w.label, ''), COALESCE(w.photo_path, '')
+               COALESCE(w.label, ''), COALESCE(w.photo_path, ''),
+               COALESCE(w.cutout_path, '')
         FROM wardrobe_items w
         JOIN clothing_items i ON i.id = w.type_id
         JOIN clothing_categories c ON c.id = i.category_id
@@ -145,6 +171,7 @@ std::vector<WardrobeItem> WardrobeRepository::listItems(const std::string& lang)
         item.category_name = stmt.columnText(4);
         item.label = stmt.columnText(5);
         item.photo_path = stmt.columnText(6);
+        item.cutout_path = stmt.columnText(7);
         items.push_back(std::move(item));
     }
 

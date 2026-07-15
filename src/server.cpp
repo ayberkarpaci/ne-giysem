@@ -9,16 +9,19 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <iterator>
 #include <map>
 #include <optional>
 #include <stdexcept>
 #include <utility>
 
+#include "cutout.h"
 #include "database.h"
 #include "env.h"
 #include "feedback.h"
 #include "gemini.h"
 #include "recommender.h"
+#include "rembg.h"
 #include "wardrobe.h"
 #include "weather.h"
 
@@ -39,6 +42,7 @@ json itemToJson(const RecommendedItem& item) {
     if (item.wardrobe_id > 0) {
         entry["wardrobe_id"] = item.wardrobe_id;
         entry["photo_url"] = item.photo_path.empty() ? "" : "/photos/" + item.photo_path;
+        entry["cutout_url"] = item.cutout_path.empty() ? "" : "/photos/" + item.cutout_path;
     }
     return entry;
 }
@@ -246,6 +250,36 @@ std::string photoExtension(const std::string& content_type) {
     return "";
 }
 
+// The reverse, for stored photos going back out to the Gemini API.
+std::string photoMimeType(const std::string& file_name) {
+    const auto dot = file_name.rfind('.');
+    const std::string ext = dot == std::string::npos ? "" : file_name.substr(dot);
+    if (ext == ".jpg" || ext == ".jpeg") return "image/jpeg";
+    if (ext == ".png") return "image/png";
+    if (ext == ".webp") return "image/webp";
+    return "application/octet-stream";
+}
+
+// The chroma key must stay far from the garment's own colors, or the
+// garment keys out with the background. Candidates are tried in order,
+// skipping any that clashes; a garment wearing all three clash groups is
+// rare enough to just take magenta.
+std::string chromaHexFor(const std::vector<std::string>& color_slugs) {
+    const auto has_any = [&](std::initializer_list<const char*> clashes) {
+        for (const char* clash : clashes) {
+            if (std::find(color_slugs.begin(), color_slugs.end(), clash) !=
+                color_slugs.end()) {
+                return true;
+            }
+        }
+        return false;
+    };
+    if (!has_any({"pink", "purple"})) return "#FF00FF";  // magenta
+    if (!has_any({"green"})) return "#00FF00";           // green
+    if (!has_any({"blue", "navy"})) return "#0000FF";    // blue
+    return "#FF00FF";
+}
+
 // Every garment type slug, for the photo classifier's vocabulary.
 std::vector<std::string> typeSlugs(Database& db) {
     sqlite3_stmt* stmt = nullptr;
@@ -284,13 +318,36 @@ AttributeVocabulary attributeVocabulary(Database& db) {
 
 const char* kPhotoDir = "data/photos";
 
+// Adopts cutouts that appeared on disk without going through the extract
+// endpoint — e.g. produced by an external tool (Codex, Photoshop, ...) and
+// dropped into data/photos/cutouts/ as <wardrobe-id>.png. Returns how many
+// items got a cutout attached.
+int adoptCutouts(Database& db) {
+    WardrobeRepository repo(db);
+    int adopted = 0;
+    for (const auto& item : repo.listItems("en")) {
+        if (item.photo_path.empty() || !item.cutout_path.empty()) continue;
+        const std::string cutout_name = "cutouts/" + std::to_string(item.id) + ".png";
+        std::error_code ec;
+        if (std::filesystem::exists(std::filesystem::path(kPhotoDir) / cutout_name, ec)) {
+            repo.setCutoutPath(item.id, cutout_name);
+            adopted += 1;
+        }
+    }
+    return adopted;
+}
+
 }  // namespace
 
 bool Server::run(int port) {
     httplib::Server server;
 
-    std::filesystem::create_directories(kPhotoDir);
+    std::filesystem::create_directories(std::filesystem::path(kPhotoDir) / "cutouts");
     server.set_mount_point("/photos", kPhotoDir);
+    if (const int adopted = adoptCutouts(db_); adopted > 0) {
+        std::cout << "Adopted " << adopted << " cutout(s) found in data/photos/cutouts."
+                  << std::endl;
+    }
     if (!server.set_mount_point("/", web_root_)) {
         std::cerr << "Warning: web root '" << web_root_ << "' not found; API only." << std::endl;
     }
@@ -395,8 +452,8 @@ bool Server::run(int port) {
             }
             if (source != "wardrobe") source = "catalog";
 
-            const int rec_id =
-                FeedbackRepository(db_).recordRecommendation(request, outfit, source);
+            const int rec_id = FeedbackRepository(db_).recordRecommendation(
+                request, outfit, source, explanation);
             res.set_content(outfitToJson(outfit, weather, request.mood_slug, source, rec_id,
                                          explanation),
                             "application/json");
@@ -443,6 +500,9 @@ bool Server::run(int port) {
 
     server.Get("/api/wardrobe", [this](const httplib::Request& req, httplib::Response& res) {
         try {
+            // Externally produced cutouts show up on the next page load
+            // without a server restart.
+            adoptCutouts(db_);
             json items = json::array();
             for (const auto& item : WardrobeRepository(db_).listItems(req.get_param_value("lang"))) {
                 json values = json::array();
@@ -460,6 +520,8 @@ bool Server::run(int port) {
                     {"category_name", item.category_name},
                     {"label", item.label},
                     {"photo_url", item.photo_path.empty() ? "" : "/photos/" + item.photo_path},
+                    {"cutout_url",
+                     item.cutout_path.empty() ? "" : "/photos/" + item.cutout_path},
                     {"values", values},
                 });
             }
@@ -479,6 +541,70 @@ bool Server::run(int port) {
                 body.value("values", std::vector<std::string>{}));
             res.status = 201;
             res.set_content(json{{"id", id}}.dump(), "application/json");
+        } catch (const std::exception& e) {
+            res.status = 400;
+            res.set_content(json{{"error", e.what()}}.dump(), "application/json");
+        }
+    });
+
+    // The lookbook's OUTFITS tab: recently served outfits with their pieces
+    // resolved against the wardrobe (photos and cutouts included).
+    server.Get("/api/outfits", [this](const httplib::Request& req, httplib::Response& res) {
+        try {
+            int limit = 60;
+            if (req.has_param("limit")) {
+                limit = std::clamp(std::stoi(req.get_param_value("limit")), 1, 200);
+            }
+            const auto names = moodNames(db_, req.get_param_value("lang"));
+            json outfits = json::array();
+            for (const auto& outfit :
+                 FeedbackRepository(db_).listOutfits(req.get_param_value("lang"), limit)) {
+                json items = json::array();
+                for (const auto& item : outfit.items) {
+                    items.push_back({
+                        {"item_slug", item.item_slug},
+                        {"item_name", item.item_name},
+                        {"category_slug", item.category_slug},
+                        {"wardrobe_id", item.wardrobe_id},
+                        {"photo_url",
+                         item.photo_path.empty() ? "" : "/photos/" + item.photo_path},
+                        {"cutout_url",
+                         item.cutout_path.empty() ? "" : "/photos/" + item.cutout_path},
+                    });
+                }
+                const auto mood_name = names.find(outfit.mood_slug);
+                outfits.push_back({
+                    {"id", outfit.id},
+                    {"created_at", outfit.created_at},
+                    {"source", outfit.source},
+                    {"mood_slug", outfit.mood_slug},
+                    {"mood_name",
+                     mood_name != names.end() ? mood_name->second : outfit.mood_slug},
+                    {"explanation", outfit.explanation},
+                    {"items", items},
+                });
+            }
+            res.set_content(json{{"outfits", outfits}}.dump(), "application/json");
+        } catch (const std::exception& e) {
+            res.status = 500;
+            res.set_content(json{{"error", e.what()}}.dump(), "application/json");
+        }
+    });
+
+    // Rename a wardrobe item (the detail panel's name field).
+    server.Put(R"(/api/wardrobe/(\d+))",
+               [this](const httplib::Request& req, httplib::Response& res) {
+        try {
+            const int id = std::stoi(req.matches[1]);
+            const json body = json::parse(req.body);
+            const std::string label = body.at("label").get<std::string>();
+            if (!WardrobeRepository(db_).setLabel(id, label)) {
+                res.status = 404;
+                res.set_content(json{{"error", "no such wardrobe item"}}.dump(),
+                                "application/json");
+                return;
+            }
+            res.set_content(json{{"id", id}, {"label", label}}.dump(), "application/json");
         } catch (const std::exception& e) {
             res.status = 400;
             res.set_content(json{{"error", e.what()}}.dump(), "application/json");
@@ -508,6 +634,13 @@ bool Server::run(int port) {
             std::ofstream out(std::filesystem::path(kPhotoDir) / file_name, std::ios::binary);
             out.write(req.body.data(), static_cast<std::streamsize>(req.body.size()));
             out.close();
+            // The cutout was made from the old photo; setPhotoPath clears the
+            // column, this clears the file.
+            const auto cutout = repo.cutoutPath(id);
+            if (cutout && !cutout->empty()) {
+                std::error_code ignored;
+                std::filesystem::remove(std::filesystem::path(kPhotoDir) / *cutout, ignored);
+            }
             repo.setPhotoPath(id, file_name);
             res.set_content(json{{"photo_url", "/photos/" + file_name}}.dump(),
                             "application/json");
@@ -589,7 +722,7 @@ bool Server::run(int port) {
             }
 
             const int rec_id = FeedbackRepository(db_).recordRecommendation(
-                request, outfit, use_wardrobe ? "wardrobe" : "catalog");
+                request, outfit, use_wardrobe ? "wardrobe" : "catalog", explanation);
             json items = json::array();
             for (const auto& item : outfit) {
                 items.push_back(itemToJson(item));
@@ -665,6 +798,99 @@ bool Server::run(int port) {
         }
     });
 
+    // Rebuilds the item's photo as a catalog cutout with a transparent
+    // background, saved under data/photos/cutouts/. The default backend is
+    // rembg — a free, local background remover the server starts on demand;
+    // EXTRACT_BACKEND=gemini switches to Gemini's (paid) image model, which
+    // repaints the empty garment on a chroma background instead.
+    server.Post(R"(/api/wardrobe/(\d+)/extract)",
+                [this](const httplib::Request& req, httplib::Response& res) {
+        try {
+            const bool use_gemini = getConfigValue("EXTRACT_BACKEND") == "gemini";
+            const std::string api_key = getConfigValue("GEMINI_API_KEY");
+            if (use_gemini && api_key.empty()) {
+                res.status = 503;
+                res.set_content(
+                    json{{"error", "GEMINI_API_KEY is not set"}, {"code", "no_api_key"}}.dump(),
+                    "application/json");
+                return;
+            }
+            const int id = std::stoi(req.matches[1]);
+            WardrobeRepository repo(db_);
+            const auto photo = repo.photoPath(id);
+            if (!photo || photo->empty()) {
+                res.status = 404;
+                res.set_content(json{{"error", "no photo to extract from"}}.dump(),
+                                "application/json");
+                return;
+            }
+            std::ifstream in(std::filesystem::path(kPhotoDir) / *photo, std::ios::binary);
+            const std::string photo_bytes((std::istreambuf_iterator<char>(in)),
+                                          std::istreambuf_iterator<char>());
+            if (photo_bytes.empty()) {
+                res.status = 404;
+                res.set_content(json{{"error", "photo file is missing"}}.dump(),
+                                "application/json");
+                return;
+            }
+
+            std::string png;
+            if (use_gemini) {
+                // The garment's type and colors sharpen the prompt and steer
+                // the chroma key away from the garment's own colors.
+                std::string item_hint;
+                std::vector<std::string> color_slugs;
+                for (const auto& item : repo.listItems("en")) {
+                    if (item.id != id) continue;
+                    item_hint = item.type_name;
+                    for (const auto& v : item.values) {
+                        if (v.attribute_slug == "color") color_slugs.push_back(v.value_slug);
+                    }
+                    break;
+                }
+                std::string image_model = getConfigValue("GEMINI_IMAGE_MODEL");
+                if (image_model.empty()) image_model = "gemini-2.5-flash-image";
+                std::string model = getConfigValue("GEMINI_MODEL");
+                if (model.empty()) model = "gemini-flash-latest";
+                const GeminiClient gemini(api_key, model, image_model);
+                const std::string shot = gemini.extractGarmentImage(
+                    photo_bytes, photoMimeType(*photo), chromaHexFor(color_slugs), item_hint);
+                png = removeChromaBackground(shot);
+            } else {
+                const std::string command =
+                    findRembgCommand(getConfigValue("REMBG_COMMAND"));
+                int port = 7101;
+                if (const std::string p = getConfigValue("REMBG_PORT"); !p.empty()) {
+                    port = std::stoi(p);
+                }
+                std::string model = getConfigValue("REMBG_MODEL");
+                if (model.empty()) model = "birefnet-general";
+                const std::string base_url = ensureRembgServer(command, port);
+                png = trimCutout(rembgRemove(base_url, photo_bytes, model));
+            }
+
+            std::filesystem::create_directories(std::filesystem::path(kPhotoDir) / "cutouts");
+            const std::string cutout_name = "cutouts/" + std::to_string(id) + ".png";
+            std::ofstream out(std::filesystem::path(kPhotoDir) / cutout_name,
+                              std::ios::binary);
+            out.write(png.data(), static_cast<std::streamsize>(png.size()));
+            out.close();
+            repo.setCutoutPath(id, cutout_name);
+            res.set_content(json{{"cutout_url", "/photos/" + cutout_name}}.dump(),
+                            "application/json");
+        } catch (const std::exception& e) {
+            const std::string what = e.what();
+            const bool rate_limited = what.find("rate limit") != std::string::npos ||
+                                      what.find("RESOURCE_EXHAUSTED") != std::string::npos;
+            const bool no_extractor = what.find("rembg") != std::string::npos;
+            res.status = rate_limited ? 429 : (no_extractor ? 503 : 500);
+            json body = {{"error", what}};
+            if (rate_limited) body["code"] = "rate_limited";
+            if (no_extractor) body["code"] = "no_local_extractor";
+            res.set_content(body.dump(), "application/json");
+        }
+    });
+
     server.Post("/api/feel", [this](const httplib::Request& req, httplib::Response& res) {
         try {
             const std::string api_key = getConfigValue("GEMINI_API_KEY");
@@ -734,8 +960,8 @@ bool Server::run(int port) {
                                  {"name", name_it != names.end() ? name_it->second : slug},
                                  {"weight", weight}});
             }
-            const int rec_id =
-                FeedbackRepository(db_).recordRecommendation(request, outfit, source);
+            const int rec_id = FeedbackRepository(db_).recordRecommendation(
+                request, outfit, source, explanation);
             json items = json::array();
             for (const auto& item : outfit) {
                 items.push_back(itemToJson(item));
@@ -763,14 +989,19 @@ bool Server::run(int port) {
             const int id = body.at("recommendation_id").get<int>();
             const int rating = body.at("rating").get<int>();
             const std::string comment = body.value("comment", "");
+            const std::vector<std::string> tags =
+                body.value("tags", std::vector<std::string>{});
 
             FeedbackRepository repo(db_);
-            if (!repo.addFeedback(id, rating, comment)) {
+            if (!repo.addFeedback(id, rating, comment, tags)) {
                 res.status = 404;
                 res.set_content(json{{"error", "no such recommendation"}}.dump(),
                                 "application/json");
                 return;
             }
+            const auto tagged = [&tags](const char* tag) {
+                return std::find(tags.begin(), tags.end(), tag) != tags.end();
+            };
 
             json response = {{"ok", true}};
             // A poor rating earns an immediate alternative: same context,
@@ -784,6 +1015,13 @@ bool Server::run(int port) {
                 request.lang = body.value("lang", stored->lang);
                 request.gender = sanitizeGender(body.value("gender", ""));
                 request.exclude_items = stored->item_slugs;
+                // The one-tap reasons steer the retry: "too hot" shops as if
+                // the day were warmer (lighter pieces win), and the formality
+                // complaints set an explicit target for the next outfit.
+                if (tagged("too-hot")) request.temperature_c += 4;
+                if (tagged("too-cold")) request.temperature_c -= 4;
+                if (tagged("too-formal")) request.formality_target = 1;
+                if (tagged("too-sporty")) request.formality_target = 3;
 
                 const Recommender recommender(db_);
                 const auto outfit = stored->source == "wardrobe"
@@ -813,6 +1051,7 @@ bool Server::run(int port) {
             const int id = std::stoi(req.matches[1]);
             WardrobeRepository repo(db_);
             const auto photo = repo.photoPath(id);
+            const auto cutout = repo.cutoutPath(id);
             if (!repo.removeItem(id)) {
                 res.status = 404;
                 res.set_content(json{{"error", "no such wardrobe item"}}.dump(),
@@ -822,6 +1061,10 @@ bool Server::run(int port) {
             if (photo && !photo->empty()) {
                 std::error_code ignored;
                 std::filesystem::remove(std::filesystem::path(kPhotoDir) / *photo, ignored);
+            }
+            if (cutout && !cutout->empty()) {
+                std::error_code ignored;
+                std::filesystem::remove(std::filesystem::path(kPhotoDir) / *cutout, ignored);
             }
             res.set_content(json{{"deleted", id}}.dump(), "application/json");
         } catch (const std::exception& e) {

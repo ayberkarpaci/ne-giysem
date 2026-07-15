@@ -2,6 +2,7 @@
 #include <catch2/matchers/catch_matchers_string.hpp>
 
 #include <algorithm>
+#include <stdexcept>
 
 #include "gemini.h"
 #include "weather.h"
@@ -302,4 +303,48 @@ TEST_CASE("preferenceAdjustment") {
     CHECK(preferenceAdjustment({"gray"}, {"navy"}, {"pink"}) == 0.0);
     CHECK(preferenceAdjustment({}, {"navy"}, {"pink"}) == 0.0);
     CHECK(preferenceAdjustment({"striped"}, {"striped"}, {}) == 0.3);  // patterns work the same
+}
+
+TEST_CASE("buildExtractPrompt embeds the chroma color and the item hint") {
+    const auto prompt = negiysem::buildExtractPrompt("#FF00FF", "jeans");
+    CHECK_THAT(prompt, ContainsSubstring("#FF00FF"));
+    CHECK_THAT(prompt, ContainsSubstring("jeans"));
+    CHECK_THAT(prompt, ContainsSubstring("Remove the wearer"));
+    CHECK_THAT(prompt, ContainsSubstring("NEVER invent"));
+    // Without a hint the generic wording steps in.
+    CHECK_THAT(negiysem::buildExtractPrompt("#00FF00", ""),
+               ContainsSubstring("garment or fashion item"));
+}
+
+TEST_CASE("extractGeminiImage") {
+    SECTION("decodes the first inline image part") {
+        // base64("PNG!") == "UE5HIQ=="
+        const std::string response = R"({"candidates":[{"content":{"parts":[
+            {"text":"Here is your image."},
+            {"inlineData":{"mimeType":"image/png","data":"UE5HIQ=="}}
+        ]}}]})";
+        CHECK(negiysem::extractGeminiImage(response) == "PNG!");
+    }
+    SECTION("accepts snake_case inline_data") {
+        const std::string response = R"({"candidates":[{"content":{"parts":[
+            {"inline_data":{"mime_type":"image/png","data":"UE5HIQ=="}}
+        ]}}]})";
+        CHECK(negiysem::extractGeminiImage(response) == "PNG!");
+    }
+    SECTION("throws when the response has no image, quoting the text") {
+        const std::string response = R"({"candidates":[{"content":{"parts":[
+            {"text":"I cannot do that."}]}}]})";
+        try {
+            negiysem::extractGeminiImage(response);
+            FAIL("expected an exception");
+        } catch (const std::runtime_error& e) {
+            CHECK_THAT(e.what(), ContainsSubstring("no image"));
+            CHECK_THAT(e.what(), ContainsSubstring("I cannot do that."));
+        }
+    }
+    SECTION("throws on an API error") {
+        CHECK_THROWS_AS(
+            negiysem::extractGeminiImage(R"({"error":{"message":"quota"}})"),
+            std::runtime_error);
+    }
 }

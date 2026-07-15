@@ -103,24 +103,30 @@
         <p id="error" class="error hidden"></p>
     </main>
 
-    <main id="tab-wardrobe" class="hidden">
-        <section class="card" id="bulk-section">
-            <h2 data-i18n="bulk_title">Add many at once</h2>
-            <p class="note" data-i18n="bulk_hint">Pick several garment photos — each one is recognized and saved automatically.</p>
-            <label class="btn file-btn">
-                <input type="file" id="bulk-input" accept="image/jpeg,image/png,image/webp" multiple hidden>
-                <span data-i18n="bulk_pick">📸 Choose photos</span>
-            </label>
-            <ul id="bulk-progress" class="bulk-progress"></ul>
-        </section>
+    <main id="tab-wardrobe" class="hidden wide">
+        <div class="lookbook-toolbar">
+            <span id="lookbook-count" class="lookbook-count"></span>
+            <div class="toolbar-actions">
+                <button id="extract-all-btn" class="ghost-btn hidden"></button>
+                <button id="add-btn" class="btn" data-i18n="add_button">📸 Add clothes</button>
+            </div>
+        </div>
 
-        <section class="card" id="wardrobe-section">
-            <h2 data-i18n="wardrobe_title">My wardrobe</h2>
-            <p id="wardrobe-empty" class="note" data-i18n="wardrobe_empty"></p>
-            <div id="wardrobe-groups"></div>
+        <div id="wardrobe-filter" class="filter-tabs"></div>
+        <p id="extract-status" class="note extract-status"></p>
 
-            <details id="add-form">
-                <summary data-i18n="add_item">Add a single item</summary>
+        <section id="add-panel" class="add-panel hidden">
+            <div class="add-block">
+                <h2 data-i18n="bulk_title">Add many at once</h2>
+                <p class="note" data-i18n="bulk_hint">Pick several garment photos — each one is recognized and saved automatically.</p>
+                <label class="btn file-btn">
+                    <input type="file" id="bulk-input" accept="image/jpeg,image/png,image/webp" multiple hidden>
+                    <span data-i18n="bulk_pick">📸 Choose photos</span>
+                </label>
+                <ul id="bulk-progress" class="bulk-progress"></ul>
+            </div>
+            <div class="add-block">
+                <h2 data-i18n="add_item">Add a single item</h2>
                 <div class="form-grid">
                     <label>
                         <span data-i18n="photo_label">Photo (optional)</span>
@@ -138,10 +144,19 @@
                     </label>
                     <button id="save-btn" class="btn" data-i18n="save">Save</button>
                 </div>
-            </details>
+            </div>
         </section>
 
+        <p id="wardrobe-empty" class="note" data-i18n="wardrobe_empty"></p>
+        <ul id="wardrobe-gallery" class="gallery-grid"></ul>
+        <div id="outfits-gallery" class="outfits-grid hidden"></div>
+
         <p id="wardrobe-error" class="error hidden"></p>
+
+        <button id="add-toggle-btn" class="fab" title="+"></button>
+
+        <div id="panel-backdrop" class="panel-backdrop hidden"></div>
+        <aside id="detail-panel" class="detail-panel hidden" aria-modal="true"></aside>
     </main>
 
     <footer data-i18n="footer">Weather by open-meteo.com &middot; location by ip-api.com</footer>

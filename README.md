@@ -50,6 +50,15 @@ Main API endpoints (see `include/server.h` for the full list):
   returns an alternative outfit, and ratings feed future scoring
 - `GET /api/location`, `GET /api/geocode?name=..` — detect / correct the city
 - `POST /api/classify-photo` — prefill the add form from a garment photo
+- `GET /api/outfits` — recently served outfits with their pieces resolved
+  against the wardrobe; the lookbook's OUTFITS tab is built from this
+- `PUT /api/wardrobe/{id}` — rename an item (the detail panel's name field)
+- `POST /api/wardrobe/{id}/extract` — turn the item's photo into a catalog
+  cutout (transparent PNG). By default this runs [rembg](https://github.com/danielgatis/rembg)
+  locally — free, no API key; the server starts and manages the rembg process
+  itself. The wardrobe gallery and outfit "look" board are built from these
+  cutouts. Set `EXTRACT_BACKEND=gemini` to use Gemini's image model instead
+  (reconstructs the empty garment on a chroma background, then keys it out).
 
 Weather overrides on every recommendation call: manual weather
 (`temp` + `rain`), corrected location (`lat` + `lon` + `city`) and/or an hour
@@ -59,7 +68,23 @@ Moods: `energetic`, `cozy`, `confident`, `relaxed`, `adventurous`.
 Languages: `en`, `tr` (display names come from the `translations` table).
 
 The weather, geocoding and geolocation APIs are free and require no API key;
-the Gemini-backed features need `GEMINI_API_KEY` in `.env`.
+the Gemini-backed features need `GEMINI_API_KEY` in `.env` (the free tier is
+enough — extraction runs locally and uses no API at all).
+
+Photo extraction needs the free rembg tool installed once:
+
+```sh
+py -m pip install "rembg[cli]" onnxruntime
+```
+
+The first extraction downloads the segmentation model (~1 GB, one time) and
+takes a few seconds to warm up; after that it is roughly a second per item,
+entirely on your machine.
+
+Cutouts can also be produced by any external tool: drop a transparent PNG
+named `<wardrobe-id>.png` into `data/photos/cutouts/` and the app picks it
+up on the next page load (existing files can simply be overwritten with
+better versions — the gallery always shows the file on disk).
 
 ## Tests
 
@@ -71,7 +96,9 @@ ctest --test-dir build --output-on-failure
 
 Core engine, SQLite catalog (72 garment types incl. jewelry and one-piece
 garments, with a research-based attribute vocabulary), Gemini photo
-classification with multi-color support, weather with location correction,
-hour windows and manual entry, and a feedback loop that learns from ratings
-are in place — all behind a bilingual (EN/TR) web UI. Next up: a mobile app
-with full i18n.
+classification with multi-color support, garment cutout extraction (local
+rembg by default, Gemini image model optional) behind a lookbook-style
+wardrobe gallery and outfit board, weather with location correction, hour
+windows and manual entry, and
+a feedback loop that learns from ratings are in place — all behind a
+bilingual (EN/TR) web UI. Next up: a mobile app with full i18n.

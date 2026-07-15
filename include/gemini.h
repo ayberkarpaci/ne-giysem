@@ -53,7 +53,15 @@ std::string buildStylistPrompt(const std::string& context,
                                const OutfitCandidates& candidates,
                                const Weather& weather,
                                const std::string& lang);
+// The image-editing prompt that reconstructs the garment alone on a uniform
+// chroma background of `chroma_hex` (e.g. "#FF00FF"). `item_hint` names the
+// garment when known (e.g. "jeans") so the model extracts the right piece.
+std::string buildExtractPrompt(const std::string& chroma_hex,
+                               const std::string& item_hint);
 std::string extractGeminiText(const std::string& api_response_json);
+// The raw bytes of the first inline image in a generateContent response.
+// Throws when the response carries no image.
+std::string extractGeminiImage(const std::string& api_response_json);
 ParsedRequest parseParsedRequestJson(const std::string& text);
 MoodWeights parseMoodWeightsJson(const std::string& text);
 // The stylist's numbered picks mapped back onto the candidates: at most one
@@ -71,8 +79,10 @@ ClassifiedGarment parseClassifiedGarmentJson(const std::string& text,
 class GeminiClient {
 public:
     // "gemini-flash-latest" is Google's rolling alias for the current Flash
-    // model, so the default keeps working as models are retired.
-    explicit GeminiClient(std::string api_key, std::string model = "gemini-flash-latest");
+    // model, so the default keeps working as models are retired. The image
+    // model handles the garment-extraction shots and has no rolling alias.
+    explicit GeminiClient(std::string api_key, std::string model = "gemini-flash-latest",
+                          std::string image_model = "gemini-2.5-flash-image");
 
     // Free text -> structured request. Throws std::runtime_error on API or
     // parse failure.
@@ -88,6 +98,15 @@ public:
                                       const std::string& mime_type,
                                       const std::vector<std::string>& type_slugs,
                                       const AttributeVocabulary& attribute_values) const;
+
+    // Garment photo -> catalog-style shot of the empty garment on a uniform
+    // background of `chroma_hex`, ready for chroma-key removal. Returns the
+    // generated image bytes (PNG or JPEG). Uses the image model, not the
+    // text model. Throws on API failure or when no image comes back.
+    std::string extractGarmentImage(const std::string& image_bytes,
+                                    const std::string& mime_type,
+                                    const std::string& chroma_hex,
+                                    const std::string& item_hint) const;
 
     // Picks the most coherent outfit from scored candidates, applying
     // fashion rules (color harmony, consistent formality) in the prompt,
@@ -109,6 +128,7 @@ private:
 
     std::string api_key_;
     std::string model_;
+    std::string image_model_;
 };
 
 }  // namespace negiysem

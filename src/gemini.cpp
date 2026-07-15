@@ -55,6 +55,36 @@ std::string base64Encode(const std::string& bytes) {
     return out;
 }
 
+// Inverse of base64Encode, for inline images in Gemini responses.
+// Whitespace is skipped; any other unexpected character ends the data.
+std::string base64Decode(const std::string& text) {
+    static const auto value = [](char c) -> int {
+        if (c >= 'A' && c <= 'Z') return c - 'A';
+        if (c >= 'a' && c <= 'z') return c - 'a' + 26;
+        if (c >= '0' && c <= '9') return c - '0' + 52;
+        if (c == '+') return 62;
+        if (c == '/') return 63;
+        return -1;
+    };
+    std::string out;
+    out.reserve(text.size() / 4 * 3);
+    unsigned int chunk = 0;
+    int bits = 0;
+    for (const char c : text) {
+        if (c == '=' ) break;
+        if (c == '\n' || c == '\r' || c == ' ') continue;
+        const int v = value(c);
+        if (v < 0) break;
+        chunk = (chunk << 6) | static_cast<unsigned int>(v);
+        bits += 6;
+        if (bits >= 8) {
+            bits -= 8;
+            out.push_back(static_cast<char>((chunk >> bits) & 0xFF));
+        }
+    }
+    return out;
+}
+
 // Gemini sometimes wraps JSON in markdown fences despite instructions.
 std::string stripCodeFences(std::string text) {
     const auto first_brace = text.find('{');
@@ -159,6 +189,29 @@ std::string buildStylistPrompt(const std::string& context,
     return prompt.str();
 }
 
+std::string buildExtractPrompt(const std::string& chroma_hex,
+                               const std::string& item_hint) {
+    std::ostringstream prompt;
+    prompt << "Use case: background extraction for a wardrobe catalog.\n"
+           << "From this photo, reconstruct ONLY the complete, empty "
+           << (item_hint.empty() ? "garment or fashion item" : item_hint)
+           << " as a professional e-commerce product shot: front view, laid out "
+              "neatly, fully visible.\n"
+           << "- Remove the wearer completely: no body, skin, hair, hands, feet, "
+              "legs or mannequin.\n"
+           << "- Remove every other object and the original background.\n"
+           << "- Stay strictly faithful to the source photo: exact colors, fabric "
+              "texture, pattern, proportions, stitching, closures, logos and "
+              "signs of wear. NEVER invent details that are not visible.\n"
+           << "- Where the item is partly hidden in the photo, complete it "
+              "plausibly and symmetrically in the same fabric.\n"
+           << "- Background: one uniform solid color, exactly " << chroma_hex
+           << ", edge to edge. No shadows, no gradients, no reflections, no "
+              "props, no text, no watermark.\n"
+           << "- Center the item; it should fill about 80% of the canvas.";
+    return prompt.str();
+}
+
 std::string buildMoodPrompt(const std::string& user_text) {
     std::ostringstream prompt;
     prompt << "The user was asked how they feel today and answered (any language):\n\""
@@ -196,6 +249,40 @@ std::string extractGeminiText(const std::string& api_response_json) {
     } catch (const json::exception&) {
         throw std::runtime_error("unexpected gemini response shape: " + api_response_json);
     }
+}
+
+std::string extractGeminiImage(const std::string& api_response_json) {
+    const json j = json::parse(api_response_json, nullptr, /*allow_exceptions=*/false);
+    if (j.is_discarded()) {
+        throw std::runtime_error("gemini returned malformed JSON");
+    }
+    if (j.contains("error")) {
+        throw std::runtime_error("gemini error: " +
+                                 j["error"].value("message", std::string("unknown")));
+    }
+    try {
+        for (const auto& part : j.at("candidates").at(0).at("content").at("parts")) {
+            // REST responses use camelCase, but be lenient about snake_case.
+            for (const char* key : {"inlineData", "inline_data"}) {
+                if (part.contains(key) && part[key].contains("data")) {
+                    const std::string bytes =
+                        base64Decode(part[key]["data"].get<std::string>());
+                    if (!bytes.empty()) return bytes;
+                }
+            }
+        }
+    } catch (const json::exception&) {
+        throw std::runtime_error("unexpected gemini response shape");
+    }
+    // The refusal text, when present, beats a generic error message. The
+    // response may embed megabytes of base64, so never echo it whole.
+    std::string detail;
+    try {
+        detail = extractGeminiText(api_response_json).substr(0, 200);
+    } catch (const std::exception&) {
+    }
+    throw std::runtime_error("gemini returned no image" +
+                             (detail.empty() ? "" : ": " + detail));
 }
 
 ParsedRequest parseParsedRequestJson(const std::string& text) {
@@ -329,9 +416,9 @@ namespace {
 // Shared POST to generateContent; `parts` may mix text and inline image data.
 // Free-tier requests hit per-minute rate limits during bulk work (HTTP 429),
 // so short limits are waited out with a few increasingly patient retries
-// instead of failing the whole call.
-std::string postGenerate(const std::string& api_key, const std::string& model,
-                         const json& parts, bool json_response) {
+// instead of failing the whole call. Returns the raw response JSON.
+std::string postGenerateRaw(const std::string& api_key, const std::string& model,
+                            const json& parts, bool json_response) {
     json body = {
         {"contents", json::array({json{{"parts", parts}}})},
     };
@@ -345,7 +432,7 @@ std::string postGenerate(const std::string& api_key, const std::string& model,
             cpr::Url{"https://generativelanguage.googleapis.com/v1beta/models/" + model +
                      ":generateContent"},
             cpr::Header{{"Content-Type", "application/json"}, {"x-goog-api-key", api_key}},
-            cpr::Body{body.dump()}, cpr::Timeout{60000});
+            cpr::Body{body.dump()}, cpr::Timeout{120000});
         if (r.status_code == 0) {
             throw std::runtime_error("gemini request failed: " + r.error.message);
         }
@@ -356,13 +443,20 @@ std::string postGenerate(const std::string& api_key, const std::string& model,
     if (r.status_code == 429) {
         throw std::runtime_error("gemini rate limit exceeded (HTTP 429): " + r.text);
     }
-    return extractGeminiText(r.text);
+    return r.text;
+}
+
+std::string postGenerate(const std::string& api_key, const std::string& model,
+                         const json& parts, bool json_response) {
+    return extractGeminiText(postGenerateRaw(api_key, model, parts, json_response));
 }
 
 }  // namespace
 
-GeminiClient::GeminiClient(std::string api_key, std::string model)
-    : api_key_(std::move(api_key)), model_(std::move(model)) {}
+GeminiClient::GeminiClient(std::string api_key, std::string model, std::string image_model)
+    : api_key_(std::move(api_key)),
+      model_(std::move(model)),
+      image_model_(std::move(image_model)) {}
 
 std::string GeminiClient::generate(const std::string& prompt, bool json_response) const {
     return postGenerate(api_key_, model_, json::array({json{{"text", prompt}}}), json_response);
@@ -378,6 +472,20 @@ ClassifiedGarment GeminiClient::classifyGarment(const std::string& image_bytes,
     });
     return parseClassifiedGarmentJson(postGenerate(api_key_, model_, parts, /*json_response=*/true),
                                       type_slugs, attribute_values);
+}
+
+std::string GeminiClient::extractGarmentImage(const std::string& image_bytes,
+                                              const std::string& mime_type,
+                                              const std::string& chroma_hex,
+                                              const std::string& item_hint) const {
+    const json parts = json::array({
+        json{{"text", buildExtractPrompt(chroma_hex, item_hint)}},
+        json{{"inlineData", {{"mimeType", mime_type}, {"data", base64Encode(image_bytes)}}}},
+    });
+    // Image models reject responseMimeType json; they answer with an
+    // interleaved text+image response instead.
+    return extractGeminiImage(
+        postGenerateRaw(api_key_, image_model_, parts, /*json_response=*/false));
 }
 
 ParsedRequest GeminiClient::parseUserRequest(const std::string& user_text) const {

@@ -180,9 +180,10 @@ LEFT JOIN translations tc
 WHERE (?2 = '' OR i.gender = 'unisex' OR i.gender = ?2);
 )sql";
 
-// Appends w.id, label, photo_path as columns 9-11 after the shared ones.
+// Appends w.id, label, photo_path, cutout_path as columns 9-12 after the
+// shared ones.
 const std::string kWardrobeQuery = std::string(kSharedColumns) + R"sql(
-     , w.id, COALESCE(w.label, ''), COALESCE(w.photo_path, '')
+     , w.id, COALESCE(w.label, ''), COALESCE(w.photo_path, ''), COALESCE(w.cutout_path, '')
 FROM wardrobe_items w
 JOIN clothing_items i ON i.id = w.type_id
 JOIN clothing_categories c ON c.id = i.category_id
@@ -470,6 +471,7 @@ OutfitCandidates Recommender::candidatesFromWardrobe(const RecommendationRequest
         item.wardrobe_id = sqlite3_column_int(stmt, 9);
         const std::string label = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 10));
         item.photo_path = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 11));
+        item.cutout_path = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 12));
         if (!label.empty()) {
             item.item_name = label;
         }

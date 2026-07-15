@@ -7,6 +7,7 @@
 #include "feedback.h"
 #include "recommender.h"
 #include "seed.h"
+#include "wardrobe.h"
 
 using negiysem::Database;
 using negiysem::FeedbackRepository;
@@ -116,4 +117,79 @@ TEST_CASE("bad ratings push an item out of the pick") {
     });
     REQUIRE(topAfter != after.end());
     CHECK(topAfter->item_slug == "sweater");
+}
+
+TEST_CASE("listOutfits returns saved outfits with wardrobe pieces resolved") {
+    Database db = makeSeededDb();
+    negiysem::WardrobeRepository wardrobe(db);
+    const int jeans_id = wardrobe.addItem("jeans", "favorite jeans", {"blue"});
+    wardrobe.setPhotoPath(jeans_id, "7.png");
+    wardrobe.setCutoutPath(jeans_id, "cutouts/7.png");
+
+    FeedbackRepository repo(db);
+    RecommendedItem jeans;
+    jeans.item_slug = "jeans";
+    jeans.category_slug = "bottom";
+    jeans.wardrobe_id = jeans_id;
+    RecommendedItem catalog_piece;
+    catalog_piece.item_slug = "sweater";
+    catalog_piece.category_slug = "top";
+
+    const auto request = coldCozyRequest();
+    repo.recordRecommendation(request, {jeans, catalog_piece}, "wardrobe",
+                              "Cozy and casual for a cold day.");
+
+    const auto outfits = repo.listOutfits("en", 10);
+    REQUIRE(outfits.size() == 1);
+    CHECK(outfits[0].mood_slug == "cozy");
+    CHECK(outfits[0].explanation == "Cozy and casual for a cold day.");
+    REQUIRE(outfits[0].items.size() == 2);
+
+    const auto& saved_jeans = *std::find_if(
+        outfits[0].items.begin(), outfits[0].items.end(),
+        [](const auto& item) { return item.item_slug == "jeans"; });
+    CHECK(saved_jeans.item_name == "favorite jeans");
+    CHECK(saved_jeans.category_slug == "bottom");
+    CHECK(saved_jeans.wardrobe_id == jeans_id);
+    CHECK(saved_jeans.cutout_path == "cutouts/7.png");
+
+    const auto& saved_sweater = *std::find_if(
+        outfits[0].items.begin(), outfits[0].items.end(),
+        [](const auto& item) { return item.item_slug == "sweater"; });
+    CHECK(saved_sweater.item_name == "Sweater");  // localized type, no label
+    CHECK(saved_sweater.wardrobe_id == 0);
+    CHECK(saved_sweater.cutout_path == "");
+}
+
+TEST_CASE("setLabel renames a wardrobe item") {
+    Database db = makeSeededDb();
+    negiysem::WardrobeRepository repo(db);
+    const int id = repo.addItem("jeans", "", {"blue"});
+    CHECK(repo.setLabel(id, "weekend jeans"));
+    CHECK(repo.listItems("en")[0].label == "weekend jeans");
+    CHECK_FALSE(repo.setLabel(9999, "nope"));
+}
+
+TEST_CASE("feedback tags are stored, validated and read back") {
+    Database db = makeSeededDb();
+    FeedbackRepository repo(db);
+    const auto request = coldCozyRequest();
+    const auto outfit = Recommender(db).recommend(request);
+    const int rec_id = repo.recordRecommendation(request, outfit, "catalog");
+
+    SECTION("round-trip across multiple ratings") {
+        CHECK(repo.addFeedback(rec_id, 2, "", {"too-hot", "colors-clash"}));
+        CHECK(repo.addFeedback(rec_id, 3, "", {"too-hot"}));  // duplicate tag ok
+        const auto tags = repo.tagsFor(rec_id);
+        REQUIRE(tags.size() == 2);  // distinct, sorted
+        CHECK(tags[0] == "colors-clash");
+        CHECK(tags[1] == "too-hot");
+    }
+    SECTION("unknown tags are rejected") {
+        CHECK_THROWS(repo.addFeedback(rec_id, 2, "", {"too-itchy"}));
+    }
+    SECTION("no tags stays valid") {
+        CHECK(repo.addFeedback(rec_id, 5, "great"));
+        CHECK(repo.tagsFor(rec_id).empty());
+    }
 }

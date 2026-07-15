@@ -15,8 +15,10 @@ the phases below move harmony, formality and learning into our own algorithm.
   formality-consistency term + bold-pattern-count penalty. One-piece garments
   replace top+bottom in enumeration. The rule-based fallback then produces
   coherent outfits on its own; Gemini refines instead of rescuing.
-- [ ] **1.3 Structured feedback** — one-tap chips under the stars: too hot,
-  too cold, colors clash, too formal, too sporty, uncomfortable.
+- [x] **1.3 Structured feedback** — one-tap chips under the stars: too hot,
+  too cold, colors clash, too formal, too sporty, uncomfortable. Tags are
+  stored per rating (`feedback_tags`) and immediately steer the retry after
+  a poor rating (temperature shift, formality target).
 - [ ] **1.4 Outfit memory** — learn pair affinities from highly rated
   recommendations (items that shine together get a pair bonus in 1.2).
 - [ ] **1.5 Temperature auto-calibration** — "too hot/cold" feedback nudges a
@@ -44,5 +46,10 @@ the phases below move harmony, formality and learning into our own algorithm.
   batching several photos per Gemini request.
 - At mobile time: PWA packaging, device tokens, `user_id` columns, CI
   (GitHub Actions, vcpkg-cached CMake + tests).
+- Done meanwhile: garment cutout extraction (local rembg/BiRefNet by
+  default, Gemini image model + chroma keying as paid opt-in) with a
+  lookbook wardrobe (cream gallery, category tabs, item detail panel with
+  computed color palette) and an OUTFITS tab built from saved
+  recommendations (now stored with wardrobe piece ids + explanation).
 - Deliberately deferred: local ONNX/OpenCV models, SSE job queues, JWT/S3/
-  Postgres, outfit image generation.
+  Postgres, full outfit image generation (rendering a person wearing it).

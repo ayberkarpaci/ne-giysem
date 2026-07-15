@@ -21,8 +21,9 @@ struct WardrobeItem {
     std::string type_name;
     std::string category_slug;
     std::string category_name;
-    std::string label;       // user-given name, may be empty
-    std::string photo_path;  // file name under data/photos/, may be empty
+    std::string label;        // user-given name, may be empty
+    std::string photo_path;   // file name under data/photos/, may be empty
+    std::string cutout_path;  // file name under data/photos/cutouts/, may be empty
     std::vector<WardrobeValue> values;
 };
 
@@ -56,8 +57,14 @@ public:
                 const std::vector<std::string>& value_slugs);
 
     bool removeItem(int id);
+    // Renames the item; returns false when the id is unknown.
+    bool setLabel(int id, const std::string& label);
+    // Replacing the photo also clears the cutout, which was made from the
+    // old photo; the caller removes the stale file.
     void setPhotoPath(int id, const std::string& file_name);
     std::optional<std::string> photoPath(int id) const;
+    void setCutoutPath(int id, const std::string& file_name);
+    std::optional<std::string> cutoutPath(int id) const;
 
     std::vector<WardrobeItem> listItems(const std::string& lang) const;
     int count() const;

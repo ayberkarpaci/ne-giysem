@@ -20,6 +20,7 @@ find_package(unofficial-sqlite3 CONFIG REQUIRED)
 find_package(cpr CONFIG REQUIRED)
 find_package(nlohmann_json CONFIG REQUIRED)
 find_package(httplib CONFIG REQUIRED)
+find_path(STB_INCLUDE_DIRS "stb_image.h" REQUIRED)
 
 add_library(negiysem_core STATIC
     src/database.cpp
@@ -31,8 +32,11 @@ add_library(negiysem_core STATIC
     src/gemini.cpp
     src/env.cpp
     src/feedback.cpp
+    src/cutout.cpp
+    src/rembg.cpp
 )
 target_include_directories(negiysem_core PUBLIC include)
+target_include_directories(negiysem_core PRIVATE ${STB_INCLUDE_DIRS})
 target_link_libraries(negiysem_core
     PUBLIC unofficial::sqlite3::sqlite3
     PRIVATE cpr::cpr nlohmann_json::nlohmann_json httplib::httplib
@@ -50,7 +54,9 @@ add_executable(negiysem_tests
     tests/test_wardrobe.cpp
     tests/test_gemini.cpp
     tests/test_feedback.cpp
+    tests/test_cutout.cpp
 )
+target_include_directories(negiysem_tests PRIVATE ${STB_INCLUDE_DIRS})
 target_link_libraries(negiysem_tests PRIVATE nlohmann_json::nlohmann_json)
 target_link_libraries(negiysem_tests PRIVATE negiysem_core Catch2::Catch2WithMain)
 include(Catch)

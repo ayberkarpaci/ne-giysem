@@ -46,6 +46,7 @@ struct RecommendedItem {
     // Set only when the item comes from the user's wardrobe.
     int wardrobe_id = 0;
     std::string photo_path;
+    std::string cutout_path;  // transparent PNG under data/photos/cutouts/
     // Attribute value slugs (colors, pattern, fit, ...) of a wardrobe item,
     // so a stylist pass can judge how well pieces go together.
     std::vector<std::string> value_slugs;

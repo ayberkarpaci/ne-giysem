@@ -2,6 +2,7 @@
 
 #include <sqlite3.h>
 
+#include <algorithm>
 #include <stdexcept>
 
 #include "database.h"
@@ -51,29 +52,35 @@ private:
 
 int FeedbackRepository::recordRecommendation(const RecommendationRequest& request,
                                              const std::vector<RecommendedItem>& outfit,
-                                             const std::string& source) {
+                                             const std::string& source,
+                                             const std::string& explanation) {
     sqlite3* db = db_.handle();
     db_.execute("BEGIN;");
     try {
         {
             Statement insert(db,
                              "INSERT INTO recommendations "
-                             "(source, mood_slug, temperature_c, is_raining, lang) "
-                             "VALUES (?1, ?2, ?3, ?4, ?5);");
+                             "(source, mood_slug, temperature_c, is_raining, lang, explanation) "
+                             "VALUES (?1, ?2, ?3, ?4, ?5, ?6);");
             insert.bindText(1, source);
             insert.bindText(2, request.mood_slug);
             insert.bindDouble(3, request.temperature_c);
             insert.bindInt(4, request.is_raining ? 1 : 0);
             insert.bindText(5, request.lang);
+            insert.bindText(6, explanation);
             insert.step();
         }
         const int id = static_cast<int>(sqlite3_last_insert_rowid(db));
         for (const auto& item : outfit) {
             Statement link(db,
                            "INSERT INTO recommendation_items "
-                           "(recommendation_id, item_slug) VALUES (?1, ?2);");
+                           "(recommendation_id, item_slug, wardrobe_item_id) "
+                           "VALUES (?1, ?2, ?3);");
             link.bindInt(1, id);
             link.bindText(2, item.item_slug);
+            if (item.wardrobe_id > 0) {
+                link.bindInt(3, item.wardrobe_id);
+            }  // otherwise stays NULL: a catalog piece
             link.step();
         }
         db_.execute("COMMIT;");
@@ -84,20 +91,116 @@ int FeedbackRepository::recordRecommendation(const RecommendationRequest& reques
     }
 }
 
+std::vector<SavedOutfit> FeedbackRepository::listOutfits(const std::string& lang,
+                                                         int limit) const {
+    sqlite3* db = db_.handle();
+    std::vector<SavedOutfit> outfits;
+    {
+        Statement stmt(db,
+                       "SELECT id, created_at, source, COALESCE(mood_slug, ''), "
+                       "COALESCE(explanation, '') FROM recommendations "
+                       "ORDER BY id DESC LIMIT ?1;");
+        stmt.bindInt(1, limit);
+        while (stmt.step()) {
+            SavedOutfit outfit;
+            outfit.id = stmt.columnInt(0);
+            outfit.created_at = stmt.columnText(1);
+            outfit.source = stmt.columnText(2);
+            outfit.mood_slug = stmt.columnText(3);
+            outfit.explanation = stmt.columnText(4);
+            outfits.push_back(std::move(outfit));
+        }
+    }
+    for (auto& outfit : outfits) {
+        Statement items(db, R"sql(
+            SELECT ri.item_slug,
+                   CASE WHEN w.label IS NOT NULL AND w.label != '' THEN w.label
+                        ELSE COALESCE(ti.name, ri.item_slug) END,
+                   COALESCE(c.slug, ''),
+                   COALESCE(ri.wardrobe_item_id, 0),
+                   COALESCE(w.photo_path, ''),
+                   COALESCE(w.cutout_path, '')
+            FROM recommendation_items ri
+            LEFT JOIN wardrobe_items w ON w.id = ri.wardrobe_item_id
+            LEFT JOIN clothing_items ci ON ci.slug = ri.item_slug
+            LEFT JOIN clothing_categories c ON c.id = ci.category_id
+            LEFT JOIN translations ti
+                   ON ti.entity_type = 'item' AND ti.entity_id = ci.id AND ti.lang_code = ?2
+            WHERE ri.recommendation_id = ?1;
+        )sql");
+        items.bindInt(1, outfit.id);
+        items.bindText(2, lang);
+        while (items.step()) {
+            SavedOutfitItem item;
+            item.item_slug = items.columnText(0);
+            item.item_name = items.columnText(1);
+            item.category_slug = items.columnText(2);
+            item.wardrobe_id = items.columnInt(3);
+            item.photo_path = items.columnText(4);
+            item.cutout_path = items.columnText(5);
+            outfit.items.push_back(std::move(item));
+        }
+    }
+    return outfits;
+}
+
+const std::vector<std::string>& FeedbackRepository::allowedTags() {
+    static const std::vector<std::string> tags = {
+        "too-hot", "too-cold", "colors-clash", "too-formal", "too-sporty",
+        "uncomfortable",
+    };
+    return tags;
+}
+
 bool FeedbackRepository::addFeedback(int recommendation_id, int rating,
-                                     const std::string& comment) {
+                                     const std::string& comment,
+                                     const std::vector<std::string>& tags) {
     if (rating < 1 || rating > 5) {
         throw std::runtime_error("rating must be between 1 and 5");
     }
+    const auto& allowed = allowedTags();
+    for (const auto& tag : tags) {
+        if (std::find(allowed.begin(), allowed.end(), tag) == allowed.end()) {
+            throw std::runtime_error("unknown feedback tag: " + tag);
+        }
+    }
     if (!recommendation(recommendation_id)) return false;
-    Statement insert(db_.handle(),
-                     "INSERT INTO recommendation_feedback "
-                     "(recommendation_id, rating, comment) VALUES (?1, ?2, ?3);");
-    insert.bindInt(1, recommendation_id);
-    insert.bindInt(2, rating);
-    insert.bindText(3, comment);
-    insert.step();
+    sqlite3* db = db_.handle();
+    {
+        Statement insert(db,
+                         "INSERT INTO recommendation_feedback "
+                         "(recommendation_id, rating, comment) VALUES (?1, ?2, ?3);");
+        insert.bindInt(1, recommendation_id);
+        insert.bindInt(2, rating);
+        insert.bindText(3, comment);
+        insert.step();
+    }
+    const int feedback_id = static_cast<int>(sqlite3_last_insert_rowid(db));
+    for (const auto& tag : tags) {
+        Statement link(db,
+                       "INSERT OR IGNORE INTO feedback_tags (feedback_id, tag) "
+                       "VALUES (?1, ?2);");
+        link.bindInt(1, feedback_id);
+        link.bindText(2, tag);
+        link.step();
+    }
     return true;
+}
+
+std::vector<std::string> FeedbackRepository::tagsFor(int recommendation_id) const {
+    Statement stmt(db_.handle(), R"sql(
+        SELECT DISTINCT ft.tag
+        FROM feedback_tags ft
+        JOIN recommendation_feedback f ON f.id = ft.feedback_id
+        WHERE f.recommendation_id = ?1
+        ORDER BY ft.tag;
+    )sql");
+    stmt.bindInt(1, recommendation_id);
+    std::vector<std::string> tags;
+    while (stmt.step()) {
+        tags.push_back(stmt.columnText(0));
+    }
+    return tags;
 }
 
 std::optional<StoredRecommendation> FeedbackRepository::recommendation(int id) const {

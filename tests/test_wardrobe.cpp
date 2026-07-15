@@ -182,3 +182,20 @@ TEST_CASE("recommendFromWardrobe only uses owned garments") {
     REQUIRE(top != outfit.end());
     CHECK(top->item_name == "navy sweater");  // label wins over type name
 }
+
+TEST_CASE("cutout path round-trips and dies with the photo it came from") {
+    Database db = makeSeededDb();
+    WardrobeRepository repo(db);
+    const int id = repo.addItem("jeans", "", {"blue"});
+
+    repo.setPhotoPath(id, "1.png");
+    repo.setCutoutPath(id, "cutouts/1.png");
+    CHECK(repo.cutoutPath(id).value() == "cutouts/1.png");
+    CHECK(repo.listItems("en")[0].cutout_path == "cutouts/1.png");
+
+    // A new photo invalidates the cutout made from the old one.
+    repo.setPhotoPath(id, "1-new.png");
+    CHECK(repo.cutoutPath(id).value() == "");
+
+    CHECK_FALSE(repo.cutoutPath(9999).has_value());
+}

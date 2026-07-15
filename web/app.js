@@ -74,6 +74,37 @@ const STRINGS = {
         bulk_rate_limited: "API limit reached — press Retry in a moment",
         bulk_retry: "Retry",
         bulk_summary: (ok, total) => `${ok}/${total} added to your wardrobe.`,
+        filter_all: "All",
+        extract_all: (n) => `✨ Clean up backgrounds (${n})`,
+        extracting: (done, total) => `Cleaning up ${done}/${total}… this takes a moment per item.`,
+        extract_done: "Backgrounds cleaned up ✓",
+        extract_failed: (n) => `${n} item(s) could not be cleaned — try again later.`,
+        extract_rate_limited: "API limit reached — try again in a minute.",
+        extract_no_tool: "The local background remover (rembg) is not set up — see the README.",
+        look_title: "The look",
+        add_button: "📸 Add clothes",
+        items_count: (n) => `${n} item${n === 1 ? "" : "s"}`,
+        outfits_count: (n) => `${n} outfit${n === 1 ? "" : "s"}`,
+        outfits_tab: "Outfits",
+        look_word: "Look",
+        panel_name: "Name",
+        panel_category: "Category",
+        panel_colors: "Colors",
+        panel_primary: "Selected",
+        panel_palette: "Image suggestions",
+        panel_details: "Details",
+        panel_no_details: "No details recorded.",
+        no_outfits: "No outfits yet — ask for a recommendation on the Outfit tab and it will be saved here.",
+        name_saved: "Saved ✓",
+        mood_tag: (name) => name,
+        outfit_desc_fallback: "Put together for your weather and mood.",
+        why_title: "What was off? (optional)",
+        "tag_too-hot": "🥵 Too warm",
+        "tag_too-cold": "🥶 Too cold",
+        "tag_colors-clash": "🎨 Colors clash",
+        "tag_too-formal": "👔 Too formal",
+        "tag_too-sporty": "👟 Too sporty",
+        "tag_uncomfortable": "😣 Uncomfortable",
     },
     tr: {
         mood_title: "Bugün nasıl hissediyorsun?",
@@ -150,8 +181,44 @@ const STRINGS = {
         bulk_rate_limited: "API sınırına takıldı — az sonra Tekrar dene",
         bulk_retry: "Tekrar dene",
         bulk_summary: (ok, total) => `${ok}/${total} gardırobuna eklendi.`,
+        filter_all: "Hepsi",
+        extract_all: (n) => `✨ Arka planları temizle (${n})`,
+        extracting: (done, total) => `Temizleniyor ${done}/${total}… her parça biraz sürüyor.`,
+        extract_done: "Arka planlar temizlendi ✓",
+        extract_failed: (n) => `${n} parça temizlenemedi — sonra tekrar dene.`,
+        extract_rate_limited: "API sınırına takıldı — bir dakika sonra tekrar dene.",
+        extract_no_tool: "Yerel arka plan temizleyici (rembg) kurulu değil — README'ye bak.",
+        look_title: "Kombin",
+        add_button: "📸 Kıyafet ekle",
+        items_count: (n) => `${n} parça`,
+        outfits_count: (n) => `${n} kombin`,
+        outfits_tab: "Kombinler",
+        look_word: "Kombin",
+        panel_name: "İsim",
+        panel_category: "Kategori",
+        panel_colors: "Renkler",
+        panel_primary: "Seçilen",
+        panel_palette: "Fotoğraftan öneriler",
+        panel_details: "Detaylar",
+        panel_no_details: "Kayıtlı detay yok.",
+        no_outfits: "Henüz kombin yok — Kombin sekmesinden öneri iste, buraya kaydedilsin.",
+        name_saved: "Kaydedildi ✓",
+        mood_tag: (name) => name,
+        outfit_desc_fallback: "Havana ve ruh hâline göre bir araya getirildi.",
+        why_title: "Sorun neydi? (isteğe bağlı)",
+        "tag_too-hot": "🥵 Fazla terletir",
+        "tag_too-cold": "🥶 Üşütür",
+        "tag_colors-clash": "🎨 Renkler uyumsuz",
+        "tag_too-formal": "👔 Fazla resmi",
+        "tag_too-sporty": "👟 Fazla spor",
+        "tag_uncomfortable": "😣 Rahat değil",
     },
 };
+
+// One-tap reasons the user can attach to a rating; slugs match the server's
+// controlled vocabulary (FeedbackRepository::allowedTags).
+const FEEDBACK_TAGS = ["too-hot", "too-cold", "colors-clash", "too-formal",
+                       "too-sporty", "uncomfortable"];
 
 const CATEGORY_EMOJI = {
     outerwear: "🧥",
@@ -191,6 +258,8 @@ function applyStaticStrings() {
     $("ask-input").placeholder = t("ask_placeholder");
     $("feel-input").placeholder = t("feel_placeholder");
     $("city-input").placeholder = t("city_placeholder");
+    $("add-toggle-btn").textContent = "+";
+    $("add-toggle-btn").title = t("add_button");
     renderLocationName();
 }
 
@@ -300,16 +369,47 @@ function weatherQueryString() {
     return query;
 }
 
+// Cutouts composed like a flat-lay "look": tops up, bottoms middle, shoes
+// and extras below. Items without a cutout stay in the list underneath.
+function buildLookBoard(items) {
+    const withCutout = items.filter((item) => item.cutout_url);
+    if (withCutout.length < 2) return null;
+    const rows = [["outerwear", "top"], ["one-piece", "bottom"],
+                  ["footwear", "accessory", "jewelry"]];
+    const board = document.createElement("div");
+    board.className = "look-board";
+    for (const categories of rows) {
+        const row = document.createElement("div");
+        row.className = "look-row";
+        for (const category of categories) {
+            for (const item of withCutout) {
+                if (item.category_slug !== category) continue;
+                const img = document.createElement("img");
+                img.src = item.cutout_url;
+                img.alt = item.item_name;
+                img.className = `look-piece look-${category}`;
+                row.appendChild(img);
+            }
+        }
+        if (row.children.length > 0) board.appendChild(row);
+    }
+    return board.children.length > 1 ? board : null;
+}
+
 function renderOutfitList(listEl, items) {
     listEl.innerHTML = "";
+    const previousBoard = listEl.parentElement.querySelector(".look-board");
+    if (previousBoard) previousBoard.remove();
+    const board = buildLookBoard(items);
+    if (board) listEl.parentElement.insertBefore(board, listEl);
     for (const item of items) {
         const li = document.createElement("li");
         const visual = document.createElement("span");
-        if (item.photo_url) {
+        if (item.cutout_url || item.photo_url) {
             const img = document.createElement("img");
-            img.src = item.photo_url;
+            img.src = item.cutout_url || item.photo_url;
             img.alt = item.item_name;
-            img.className = "thumb";
+            img.className = item.cutout_url ? "thumb thumb-cutout" : "thumb";
             visual.appendChild(img);
         } else {
             visual.className = "emoji";
@@ -383,12 +483,38 @@ function appendFeedbackWidget(box, recommendationId, listId) {
         btn.addEventListener("click", () => {
             rating = i;
             starButtons.forEach((s, idx) => (s.textContent = idx < i ? "★" : "☆"));
+            why.classList.remove("hidden");
             detail.classList.remove("hidden");
         });
         starButtons.push(btn);
         stars.appendChild(btn);
     }
     widget.appendChild(stars);
+
+    // One-tap reasons, revealed together with the comment box. They both
+    // explain the rating and steer the retry after a poor one.
+    const why = document.createElement("div");
+    why.className = "hidden";
+    why.appendChild(note("why_title"));
+    const tagChips = document.createElement("div");
+    tagChips.className = "chips feedback-tags";
+    const selectedTags = new Set();
+    for (const slug of FEEDBACK_TAGS) {
+        const chip = document.createElement("button");
+        chip.type = "button";
+        chip.textContent = t(`tag_${slug}`);
+        chip.addEventListener("click", () => {
+            if (selectedTags.has(slug)) {
+                selectedTags.delete(slug);
+            } else {
+                selectedTags.add(slug);
+            }
+            chip.classList.toggle("selected", selectedTags.has(slug));
+        });
+        tagChips.appendChild(chip);
+    }
+    why.appendChild(tagChips);
+    widget.appendChild(why);
 
     const detail = document.createElement("div");
     detail.className = "feedback-detail hidden";
@@ -411,6 +537,7 @@ function appendFeedbackWidget(box, recommendationId, listId) {
                     recommendation_id: recommendationId,
                     rating,
                     comment: comment.value.trim(),
+                    tags: [...selectedTags],
                     lang,
                     gender: $("gender-select").value || undefined,
                 }),
@@ -497,6 +624,7 @@ async function recommend() {
         $("explanation").classList.toggle("hidden", !data.explanation);
         renderFeedback("feedback-box", data.recommendation_id, "outfit-list");
         $("result").classList.remove("hidden");
+        savedOutfits = null;  // a new look was saved for the OUTFITS tab
     } catch (err) {
         console.error(err);
         showError(t("error"));
@@ -529,6 +657,7 @@ async function ask() {
         $("ask-explanation").textContent = data.explanation || "";
         renderFeedback("ask-feedback-box", data.recommendation_id, "ask-outfit-list");
         $("ask-result").classList.remove("hidden");
+        savedOutfits = null;  // a new look was saved for the OUTFITS tab
     } catch (err) {
         console.error(err);
         showError(t("error"));
@@ -643,46 +772,143 @@ async function loadAttributes() {
     setAttributeValues(previous);
 }
 
-// Fixed display order for the wardrobe groups.
+// Fixed display order for the wardrobe categories.
 const CATEGORY_ORDER =
     ["outerwear", "top", "bottom", "one-piece", "footwear", "accessory", "jewelry"];
 
+let wardrobeItems = [];
+let wardrobeFilter = "all";   // a category slug, "all" or "outfits"
+let extractRunning = false;
+let savedOutfits = null;      // cache for the OUTFITS tab; null = not loaded
+
 async function loadWardrobe() {
     const data = await fetchJson(`/api/wardrobe?lang=${lang}`);
+    savedOutfits = null;  // items or language changed; refetch on demand
+    wardrobeItems = data.items;
     wardrobeCount = data.items.length;
     $("wardrobe-empty").classList.toggle("hidden", wardrobeCount > 0);
     $("wardrobe-toggle").classList.toggle("hidden", wardrobeCount === 0);
     $("wardrobe-count").textContent = wardrobeCount;
     $("wardrobe-count").classList.toggle("hidden", wardrobeCount === 0);
+    renderWardrobe();
+}
 
-    // Group the items by category, in a fixed category order.
-    const groups = new Map();
-    for (const item of data.items) {
-        if (!groups.has(item.category_slug)) {
-            groups.set(item.category_slug, { name: item.category_name, items: [] });
-        }
-        groups.get(item.category_slug).items.push(item);
+// One flat gallery filtered by category tabs, like a lookbook; the last tab
+// shows saved outfits instead of garments.
+function renderWardrobe() {
+    const present = CATEGORY_ORDER.filter(
+        (slug) => wardrobeItems.some((item) => item.category_slug === slug));
+    if (!["all", "outfits"].includes(wardrobeFilter) &&
+        !present.includes(wardrobeFilter)) {
+        wardrobeFilter = "all";
     }
 
-    const container = $("wardrobe-groups");
-    container.innerHTML = "";
-    const ordered = [...groups.keys()].sort(
-        (a, b) => CATEGORY_ORDER.indexOf(a) - CATEGORY_ORDER.indexOf(b));
-    for (const slug of ordered) {
-        const group = groups.get(slug);
-        const title = document.createElement("h3");
-        title.className = "group-title";
-        title.textContent =
-            `${CATEGORY_EMOJI[slug] || "👔"} ${group.name} (${group.items.length})`;
-        container.appendChild(title);
-
-        const grid = document.createElement("ul");
-        grid.className = "wardrobe-grid";
-        for (const item of group.items) {
-            grid.appendChild(wardrobeCard(item));
-        }
-        container.appendChild(grid);
+    const filter = $("wardrobe-filter");
+    filter.innerHTML = "";
+    const addTab = (slug, name, extraClass) => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.textContent = name;
+        if (extraClass) btn.classList.add(extraClass);
+        btn.classList.toggle("active", wardrobeFilter === slug);
+        btn.addEventListener("click", () => {
+            wardrobeFilter = slug;
+            closePanel();
+            renderWardrobe();
+        });
+        filter.appendChild(btn);
+    };
+    addTab("all", t("filter_all"));
+    for (const slug of present) {
+        const item = wardrobeItems.find((i) => i.category_slug === slug);
+        addTab(slug, item.category_name);
     }
+    addTab("outfits", t("outfits_tab"), "outfits-tab");
+
+    const showOutfits = wardrobeFilter === "outfits";
+    $("wardrobe-gallery").classList.toggle("hidden", showOutfits);
+    $("outfits-gallery").classList.toggle("hidden", !showOutfits);
+    if (showOutfits) {
+        renderOutfits();
+    } else {
+        renderGallery();
+    }
+    renderExtractBar();
+}
+
+function galleryItems() {
+    return wardrobeItems.filter(
+        (item) => wardrobeFilter === "all" || wardrobeFilter === "outfits" ||
+                  item.category_slug === wardrobeFilter);
+}
+
+function renderGallery() {
+    const gallery = $("wardrobe-gallery");
+    gallery.innerHTML = "";
+    const items = galleryItems();
+    for (const item of items) {
+        gallery.appendChild(wardrobeCard(item));
+    }
+    $("lookbook-count").textContent = t("items_count")(items.length);
+}
+
+function itemsMissingCutout() {
+    return wardrobeItems.filter((item) => item.photo_url && !item.cutout_url);
+}
+
+function renderExtractBar() {
+    const missing = itemsMissingCutout();
+    const btn = $("extract-all-btn");
+    btn.textContent = t("extract_all")(missing.length);
+    btn.disabled = extractRunning;
+    btn.classList.toggle("hidden",
+        missing.length === 0 || wardrobeFilter === "outfits");
+    if (!extractRunning) $("extract-status").textContent = "";
+}
+
+// Sends every photo that has no cutout yet through the extraction endpoint,
+// one at a time. The first item is slow (the background-removal model loads
+// once); after that it is fast and free — everything runs locally.
+async function extractAllMissing() {
+    if (extractRunning) return;
+    const missing = itemsMissingCutout();
+    if (missing.length === 0) return;
+    extractRunning = true;
+    const status = $("extract-status");
+    let failed = 0;
+    let stopReason = "";
+    for (let i = 0; i < missing.length; ++i) {
+        renderExtractBar();
+        status.textContent = t("extracting")(i + 1, missing.length);
+        try {
+            const res = await fetch(`/api/wardrobe/${missing[i].id}/extract`,
+                                    { method: "POST" });
+            const data = await res.json();
+            if (!res.ok) {
+                failed += 1;
+                if (data.code === "rate_limited") {
+                    stopReason = "extract_rate_limited";
+                    break;
+                }
+                if (data.code === "no_local_extractor") {
+                    stopReason = "extract_no_tool";
+                    break;
+                }
+                continue;
+            }
+            const item = wardrobeItems.find((w) => w.id === missing[i].id);
+            if (item) item.cutout_url = data.cutout_url;
+            renderGallery();
+        } catch (err) {
+            console.error(err);
+            failed += 1;
+        }
+    }
+    extractRunning = false;
+    renderExtractBar();
+    status.textContent = stopReason ? t(stopReason)
+        : failed > 0 ? t("extract_failed")(failed)
+        : t("extract_done");
 }
 
 function wardrobeCard(item) {
@@ -690,9 +916,10 @@ function wardrobeCard(item) {
 
     const visual = document.createElement("div");
     visual.className = "card-visual";
-    if (item.photo_url) {
+    if (item.cutout_url || item.photo_url) {
+        visual.classList.add(item.cutout_url ? "cutout" : "photo");
         const img = document.createElement("img");
-        img.src = item.photo_url;
+        img.src = item.cutout_url || item.photo_url;
         img.alt = item.label || item.type_name;
         img.loading = "lazy";
         visual.appendChild(img);
@@ -704,19 +931,16 @@ function wardrobeCard(item) {
     const name = document.createElement("span");
     name.className = "card-name";
     name.textContent = item.label || item.type_name;
-    const details = document.createElement("span");
-    details.className = "category";
-    const parts = item.values.map((v) => v.name);
-    if (item.label) parts.unshift(item.type_name);
-    details.textContent = parts.join(" · ");
 
     const del = document.createElement("button");
     del.className = "delete-btn";
     del.textContent = "✕";
     del.title = t("delete");
-    del.addEventListener("click", async () => {
+    del.addEventListener("click", async (e) => {
+        e.stopPropagation();
         try {
             await fetchJson(`/api/wardrobe/${item.id}`, { method: "DELETE" });
+            closePanel();
             await loadWardrobe();
         } catch (err) {
             console.error(err);
@@ -724,8 +948,329 @@ function wardrobeCard(item) {
         }
     });
 
-    li.append(visual, name, details, del);
+    li.addEventListener("click", () => openItemPanel(item));
+    li.append(visual, name, del);
     return li;
+}
+
+// ---- detail slide-in panel ----
+
+function closePanel() {
+    $("detail-panel").classList.add("hidden");
+    $("panel-backdrop").classList.add("hidden");
+}
+
+function openPanel() {
+    const panel = $("detail-panel");
+    panel.innerHTML = "";
+    panel.classList.remove("hidden");
+    $("panel-backdrop").classList.remove("hidden");
+    panel.scrollTop = 0;
+    return panel;
+}
+
+function panelHead(panel, kickerText, plain = false) {
+    const head = document.createElement("div");
+    head.className = "panel-head";
+    const kicker = document.createElement("span");
+    kicker.className = plain ? "panel-kicker plain" : "panel-kicker";
+    kicker.textContent = kickerText;
+    const close = document.createElement("button");
+    close.className = "panel-close";
+    close.textContent = "✕";
+    close.addEventListener("click", closePanel);
+    head.append(kicker, close);
+    panel.appendChild(head);
+    return head;
+}
+
+function panelSection(panel, labelText) {
+    const section = document.createElement("div");
+    section.className = "panel-section";
+    if (labelText) {
+        const label = document.createElement("span");
+        label.className = "panel-label";
+        label.textContent = labelText;
+        section.appendChild(label);
+    }
+    panel.appendChild(section);
+    return section;
+}
+
+// Dominant color and a small palette, sampled from the item's image on a
+// canvas. Transparent pixels are skipped, so cutouts yield garment colors.
+function computePalette(url) {
+    return new Promise((resolve) => {
+        const img = new Image();
+        img.onload = () => {
+            const size = 48;
+            const canvas = document.createElement("canvas");
+            canvas.width = size;
+            canvas.height = size;
+            const g = canvas.getContext("2d");
+            g.drawImage(img, 0, 0, size, size);
+            const data = g.getImageData(0, 0, size, size).data;
+            const buckets = new Map();
+            for (let i = 0; i < data.length; i += 4) {
+                if (data[i + 3] < 128) continue;  // transparent
+                // Quantize to 32-steps so shades group together.
+                const key = [data[i], data[i + 1], data[i + 2]]
+                    .map((v) => Math.min(224, Math.round(v / 32) * 32)).join(",");
+                buckets.set(key, (buckets.get(key) || 0) + 1);
+            }
+            const top = [...buckets.entries()]
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, 5)
+                .map(([key]) => {
+                    const [r, g2, b] = key.split(",").map(Number);
+                    return "#" + [r, g2, b]
+                        .map((v) => v.toString(16).padStart(2, "0")).join("")
+                        .toUpperCase();
+                });
+            resolve(top);
+        };
+        img.onerror = () => resolve([]);
+        img.src = url;
+    });
+}
+
+async function openItemPanel(item) {
+    const panel = openPanel();
+    panelHead(panel, item.category_name);
+
+    const hero = document.createElement("div");
+    hero.className = "panel-hero";
+    if (item.cutout_url || item.photo_url) {
+        const img = document.createElement("img");
+        img.src = item.cutout_url || item.photo_url;
+        img.alt = item.label || item.type_name;
+        hero.appendChild(img);
+    } else {
+        const emoji = document.createElement("span");
+        emoji.className = "emoji";
+        emoji.textContent = CATEGORY_EMOJI[item.category_slug] || "👔";
+        hero.appendChild(emoji);
+    }
+    panel.appendChild(hero);
+
+    // NAME (editable, saved on change) + CATEGORY side by side.
+    const row = document.createElement("div");
+    row.className = "panel-row";
+    const nameCell = document.createElement("div");
+    const nameLabel = document.createElement("span");
+    nameLabel.className = "panel-label";
+    nameLabel.textContent = t("panel_name");
+    const nameInput = document.createElement("input");
+    nameInput.type = "text";
+    nameInput.maxLength = 60;
+    nameInput.value = item.label || "";
+    nameInput.placeholder = item.type_name;
+    nameInput.addEventListener("change", async () => {
+        try {
+            await fetchJson(`/api/wardrobe/${item.id}`, {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ label: nameInput.value.trim() }),
+            });
+            item.label = nameInput.value.trim();
+            nameLabel.textContent = `${t("panel_name")} — ${t("name_saved")}`;
+            renderGallery();
+        } catch (err) {
+            console.error(err);
+            showError(t("save_error"), "wardrobe-error");
+        }
+    });
+    nameCell.append(nameLabel, nameInput);
+    const catCell = document.createElement("div");
+    const catLabel = document.createElement("span");
+    catLabel.className = "panel-label";
+    catLabel.textContent = t("panel_category");
+    const catValue = document.createElement("div");
+    catValue.className = "panel-static";
+    catValue.textContent = item.category_name;
+    catCell.append(catLabel, catValue);
+    row.append(nameCell, catCell);
+    const rowSection = panelSection(panel, "");
+    rowSection.appendChild(row);
+
+    // COLORS: dominant + palette computed from the image.
+    if (item.cutout_url || item.photo_url) {
+        const colors = panelSection(panel, t("panel_colors"));
+        const palette = await computePalette(item.cutout_url || item.photo_url);
+        if (palette.length > 0) {
+            const primary = document.createElement("div");
+            primary.className = "swatch-row";
+            const main = document.createElement("span");
+            main.className = "swatch";
+            main.style.background = palette[0];
+            const hex = document.createElement("span");
+            hex.innerHTML = `<span class="swatch-caption">${t("panel_primary")}</span><br>` +
+                            `<span class="swatch-hex">${palette[0]}</span>`;
+            primary.append(main, hex);
+            colors.appendChild(primary);
+            if (palette.length > 1) {
+                const caption = document.createElement("span");
+                caption.className = "swatch-caption";
+                caption.style.display = "block";
+                caption.style.margin = "0.6rem 0 0.3rem";
+                caption.textContent = t("panel_palette");
+                colors.appendChild(caption);
+                const rowEl = document.createElement("div");
+                rowEl.className = "swatch-row";
+                for (const color of palette.slice(1)) {
+                    const s = document.createElement("span");
+                    s.className = "swatch small";
+                    s.style.background = color;
+                    s.title = color;
+                    rowEl.appendChild(s);
+                }
+                colors.appendChild(rowEl);
+            }
+        }
+    }
+
+    // DETAILS: the item's recorded attribute values as tags.
+    const details = panelSection(panel, t("panel_details"));
+    if (item.values.length > 0) {
+        const tags = document.createElement("div");
+        tags.className = "detail-tags";
+        for (const v of item.values) {
+            const tag = document.createElement("span");
+            tag.textContent = v.name;
+            tags.appendChild(tag);
+        }
+        details.appendChild(tags);
+    } else {
+        const none = document.createElement("p");
+        none.className = "note";
+        none.textContent = t("panel_no_details");
+        details.appendChild(none);
+    }
+
+    const danger = document.createElement("div");
+    danger.className = "panel-danger";
+    const del = document.createElement("button");
+    del.className = "ghost-btn";
+    del.textContent = `✕ ${t("delete")}`;
+    del.addEventListener("click", async () => {
+        try {
+            await fetchJson(`/api/wardrobe/${item.id}`, { method: "DELETE" });
+            closePanel();
+            await loadWardrobe();
+        } catch (err) {
+            console.error(err);
+            showError(t("error"), "wardrobe-error");
+        }
+    });
+    danger.appendChild(del);
+    panel.appendChild(danger);
+}
+
+// ---- the OUTFITS tab ----
+
+async function renderOutfits() {
+    const grid = $("outfits-gallery");
+    if (savedOutfits === null) {
+        grid.innerHTML = "";
+        try {
+            const data = await fetchJson(`/api/outfits?lang=${lang}`);
+            savedOutfits = data.outfits;
+        } catch (err) {
+            console.error(err);
+            showError(t("error"), "wardrobe-error");
+            return;
+        }
+    }
+    grid.innerHTML = "";
+    $("lookbook-count").textContent = t("outfits_count")(savedOutfits.length);
+    if (savedOutfits.length === 0) {
+        const empty = document.createElement("p");
+        empty.className = "note";
+        empty.textContent = t("no_outfits");
+        grid.appendChild(empty);
+        return;
+    }
+    savedOutfits.forEach((outfit, index) => {
+        const number = savedOutfits.length - index;  // newest first, highest number
+        const tile = document.createElement("div");
+        tile.className = "look-tile";
+        const visual = document.createElement("div");
+        visual.className = "look-tile-visual";
+        const withImage = outfit.items.filter((i) => i.cutout_url || i.photo_url);
+        if (withImage.length > 0) {
+            for (const item of withImage.slice(0, 4)) {
+                const img = document.createElement("img");
+                img.src = item.cutout_url || item.photo_url;
+                img.alt = item.item_name;
+                img.loading = "lazy";
+                visual.appendChild(img);
+            }
+        } else {
+            const emoji = document.createElement("span");
+            emoji.className = "emoji";
+            emoji.textContent = outfit.items
+                .map((i) => CATEGORY_EMOJI[i.category_slug] || "👔").join(" ");
+            visual.appendChild(emoji);
+        }
+        const label = document.createElement("span");
+        label.className = "look-tile-label";
+        label.textContent = `${t("look_word")} ${number}`;
+        tile.append(visual, label);
+        tile.addEventListener("click", () => openOutfitPanel(outfit, number));
+        grid.appendChild(tile);
+    });
+}
+
+function openOutfitPanel(outfit, number) {
+    const panel = openPanel();
+    panelHead(panel, `${t("look_word")} ${number}`, /*plain=*/true);
+
+    const board = buildLookBoard(outfit.items);
+    if (board) {
+        panel.appendChild(board);
+    } else {
+        const list = document.createElement("ul");
+        list.className = "outfit";
+        for (const item of outfit.items) {
+            const li = document.createElement("li");
+            const text = document.createElement("span");
+            const category = document.createElement("span");
+            category.className = "category";
+            category.textContent = item.category_slug;
+            const name = document.createElement("span");
+            name.textContent = item.item_name;
+            text.append(category, name);
+            li.appendChild(text);
+            list.appendChild(li);
+        }
+        panel.appendChild(list);
+    }
+
+    const title = document.createElement("h3");
+    title.className = "panel-title";
+    title.textContent = outfit.items.map((i) => i.item_name).slice(0, 3).join(" · ");
+    panel.appendChild(title);
+
+    const desc = document.createElement("p");
+    desc.className = "panel-text";
+    desc.textContent = outfit.explanation || t("outfit_desc_fallback");
+    panel.appendChild(desc);
+
+    const tags = document.createElement("div");
+    tags.className = "detail-tags";
+    tags.style.marginTop = "0.9rem";
+    if (outfit.mood_name) {
+        const mood = document.createElement("span");
+        mood.textContent = outfit.mood_name;
+        tags.appendChild(mood);
+    }
+    for (const item of outfit.items.slice(0, 3)) {
+        if (!item.category_slug) continue;
+        const tag = document.createElement("span");
+        tag.textContent = item.category_slug;
+        tags.appendChild(tag);
+    }
+    panel.appendChild(tags);
 }
 
 // Classifies and saves one photo; updates its progress row. Returns true
@@ -826,6 +1371,9 @@ async function bulkUpload() {
     summary.textContent = t("bulk_summary")(added, files.length);
     progress.appendChild(summary);
     await loadWardrobe();
+    // Fresh photos go straight to background cleanup — that is the point of
+    // uploading them. Existing items only ever start from the button.
+    if (added > 0) await extractAllMissing();
 }
 
 async function classifyPhoto() {
@@ -891,6 +1439,7 @@ async function saveItem() {
         $("photo-input").value = "";
         $("classify-note").classList.add("hidden");
         await loadWardrobe();
+        if (original) await extractAllMissing();
     } catch (err) {
         console.error(err);
         showError(t("save_error"), "wardrobe-error");
@@ -928,6 +1477,20 @@ document.querySelectorAll(".tabs .tab").forEach((btn) => {
 showTab(localStorage.getItem("tab") || "home");
 
 $("bulk-input").addEventListener("change", bulkUpload);
+$("extract-all-btn").addEventListener("click", extractAllMissing);
+function toggleAddPanel() {
+    const panel = $("add-panel");
+    panel.classList.toggle("hidden");
+    if (!panel.classList.contains("hidden")) {
+        panel.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+}
+$("add-toggle-btn").addEventListener("click", toggleAddPanel);
+$("add-btn").addEventListener("click", toggleAddPanel);
+$("panel-backdrop").addEventListener("click", closePanel);
+document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") closePanel();
+});
 
 $("recommend-btn").addEventListener("click", recommend);
 $("ask-btn").addEventListener("click", ask);
