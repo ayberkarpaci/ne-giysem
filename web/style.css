@@ -19,6 +19,9 @@
     --danger: #b4462e;
     --ok: #4a7a4a;
     --cream: #f6efe5;        /* warm sheet the garments float on */
+    /* Vertical space the browser chrome around .home-shell uses: body
+       paddings + topbar + its margin. Keep in sync when those change. */
+    --chrome: 7.2rem;
     --radius: 1.3rem;
     --shadow: 0 18px 52px rgba(20, 22, 30, 0.08), 0 3px 10px rgba(20, 22, 30, 0.035);
     --serif: Georgia, "Times New Roman", serif;
@@ -162,12 +165,21 @@ main.wide {
 /* ---- home: the style stage ---- */
 
 .home-shell {
-    flex: 1;
+    /* No flex-grow here: it would override the explicit height with
+       content-based sizing and push the page past the fold. */
+    flex: 0 0 auto;
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 22.9rem;
+    grid-template-columns: minmax(0, 1fr) 26rem;
     gap: 1.25rem;
-    height: calc(100vh - 7.6rem);
-    min-height: 34rem;
+    height: calc(100vh - var(--chrome));
+    height: calc(100dvh - var(--chrome));
+    min-height: 30rem;
+}
+
+/* The site footer only makes sense under the scrolling wardrobe page; on
+   the fixed-height home screen it would push the page past the fold. */
+body:has(#tab-home:not(.hidden)) > footer {
+    display: none;
 }
 
 .stage,
@@ -271,25 +283,30 @@ main.wide {
 #stage-board .look-board {
     background: transparent;
     border: none;
+    margin: 0;
     padding: 1rem;
     gap: 0.7rem;
     max-height: 100%;
+    max-width: 100%;
+    overflow: hidden;
 }
 
+/* Piece sizes are viewport-relative so the whole outfit always fits the
+   canvas, whatever the screen height. */
 #stage-board .look-piece {
-    max-width: 12rem;
-    max-height: 10.5rem;
+    max-width: min(12rem, 14vw);
+    max-height: min(10.5rem, 20vh);
 }
 
 #stage-board .look-piece.look-bottom,
 #stage-board .look-piece.look-one-piece {
-    max-height: 13.5rem;
+    max-height: min(13.5rem, 28vh);
 }
 
 #stage-board .look-piece.look-footwear,
 #stage-board .look-piece.look-accessory,
 #stage-board .look-piece.look-jewelry {
-    max-height: 5.5rem;
+    max-height: min(5.5rem, 9vh);
 }
 
 /* Recent looks film strip. */
@@ -325,7 +342,7 @@ main.wide {
 }
 
 .look-card {
-    height: 4.3rem;
+    height: 3.9rem;
     display: flex;
     align-items: center;
     gap: 0.5rem;
@@ -392,12 +409,19 @@ main.wide {
 
 .sidebar {
     display: grid;
-    grid-template-rows: auto auto minmax(0, 1fr) auto;
+    /* Row 1 (prompt + editor) may not push the others off screen: it gets
+       its own scrollbar instead when the detail editor is open. */
+    grid-template-rows: minmax(0, max-content) auto minmax(0, 1fr) auto;
 }
 
 .side-section {
     padding: 1.15rem 1.25rem;
     border-bottom: 1px solid #ececef;
+}
+
+.side-section:first-child {
+    overflow-y: auto;
+    min-height: 0;
 }
 
 .section-title {
@@ -461,14 +485,12 @@ main.wide {
 }
 
 .context-editor {
-    margin-top: 0.8rem;
-    padding-top: 0.8rem;
+    margin-top: 0.85rem;
+    padding-top: 0.85rem;
     border-top: 1px dashed var(--border);
     display: flex;
     flex-direction: column;
-    gap: 0.55rem;
-    max-height: 18rem;
-    overflow-y: auto;
+    gap: 0.8rem;
 }
 
 .editor-label {
@@ -1597,28 +1619,25 @@ footer {
 }
 
 @media (max-height: 51rem) {
+    :root {
+        --chrome: 6.3rem;
+    }
     body {
         padding-top: 0.8rem;
     }
     .topbar {
         margin-bottom: 0.7rem;
     }
-    #stage-board .look-piece {
-        max-height: 8.5rem;
-    }
-    #stage-board .look-piece.look-bottom,
-    #stage-board .look-piece.look-one-piece {
-        max-height: 11rem;
-    }
-    #stage-board .look-piece.look-footwear,
-    #stage-board .look-piece.look-accessory,
-    #stage-board .look-piece.look-jewelry {
-        max-height: 4.5rem;
+    .stage {
+        grid-template-rows: 3.6rem minmax(0, 1fr) auto;
     }
     .side-section {
         padding: 0.85rem 1.25rem;
     }
     .look-card {
-        height: 3.6rem;
+        height: 3.4rem;
+    }
+    .look-thumb {
+        height: 2.7rem;
     }
 }
