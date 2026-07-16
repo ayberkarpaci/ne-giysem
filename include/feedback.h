@@ -104,6 +104,12 @@ public:
     // The accumulated per-type comfort shifts, keyed by catalog type slug.
     std::map<std::string, double> temperatureOffsets() const;
 
+    // The learned style profile: a weight in [-1, 1] per attribute value
+    // slug (colors, fits, materials, ...), from the ratings of outfits the
+    // value appeared in. Few observations are damped toward 0, so one
+    // lucky 5-star day doesn't define a taste.
+    std::map<std::string, double> stylePreferences() const;
+
 private:
     Database& db_;
 };

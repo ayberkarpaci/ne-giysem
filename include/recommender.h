@@ -105,6 +105,12 @@ double pairAffinityBonus(const std::vector<RecommendedItem>& outfit,
 // was never worn (nullopt) gets a small +0.05 exploration bonus instead.
 double varietyAdjustment(std::optional<double> days_since_worn);
 
+// The learned style profile applied to one item: 0.1 per point of summed
+// value weights (see FeedbackRepository::stylePreferences), clamped to
+// [-0.3, 0.3] so taste seasons the ranking without ruling it.
+double styleAdjustment(const std::vector<std::string>& value_slugs,
+                       const std::map<std::string, double>& preferences);
+
 // Assembles the best outfit from per-category candidates by scoring whole
 // combinations (mean of core item scores + harmony terms + pair-affinity
 // bonus) instead of picking each category independently. Core pieces are

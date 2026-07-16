@@ -302,6 +302,17 @@ double varietyAdjustment(std::optional<double> days_since_worn) {
     return -0.3 / std::max(1.0, *days_since_worn);
 }
 
+double styleAdjustment(const std::vector<std::string>& value_slugs,
+                       const std::map<std::string, double>& preferences) {
+    if (preferences.empty()) return 0.0;
+    double sum = 0.0;
+    for (const auto& slug : value_slugs) {
+        const auto it = preferences.find(slug);
+        if (it != preferences.end()) sum += it->second;
+    }
+    return std::clamp(0.1 * sum, -0.3, 0.3);
+}
+
 double pairAffinityBonus(const std::vector<RecommendedItem>& outfit,
                          const PairAffinities& affinities) {
     if (affinities.empty()) return 0.0;
@@ -503,6 +514,7 @@ OutfitCandidates Recommender::candidatesFromWardrobe(const RecommendationRequest
     const auto ratings = FeedbackRepository(db_).averageRatings();
     const auto temp_offsets = FeedbackRepository(db_).temperatureOffsets();
     const auto days_since_worn = loadDaysSinceWorn(db);
+    const auto style_prefs = FeedbackRepository(db_).stylePreferences();
 
     sqlite3_stmt* stmt = nullptr;
     if (sqlite3_prepare_v2(db, kWardrobeQuery.c_str(), -1, &stmt, nullptr) != SQLITE_OK) {
@@ -561,6 +573,9 @@ OutfitCandidates Recommender::candidatesFromWardrobe(const RecommendationRequest
         if (values_it != all_values.end()) {
             item.value_slugs = values_it->second;
         }
+        // The learned style profile: values that starred in well-rated
+        // outfits lift the piece, disliked ones weigh it down.
+        item.score += styleAdjustment(item.value_slugs, style_prefs);
         const auto colors_it = colors.find(item.wardrobe_id);
         if (colors_it != colors.end()) {
             item.score += preferenceAdjustment(colors_it->second, request.colors_preferred,

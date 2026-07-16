@@ -441,3 +441,15 @@ TEST_CASE("assembleOutfit with an rng lets near-tied outfits take turns") {
     }
     CHECK(tops_seen == std::set<std::string>{"blazer"});
 }
+
+TEST_CASE("styleAdjustment seasons scores with the learned profile") {
+    using negiysem::styleAdjustment;
+    const std::map<std::string, double> prefs = {{"navy", 0.8}, {"yellow", -1.0}};
+    CHECK_THAT(styleAdjustment({"navy"}, prefs), WithinAbs(0.08, 1e-9));
+    CHECK_THAT(styleAdjustment({"yellow", "navy"}, prefs), WithinAbs(-0.02, 1e-9));
+    CHECK_THAT(styleAdjustment({"gray"}, prefs), WithinAbs(0.0, 1e-9));
+    CHECK_THAT(styleAdjustment({"navy"}, {}), WithinAbs(0.0, 1e-9));
+    // Clamped: taste never overrules weather outright.
+    const std::map<std::string, double> extreme = {{"navy", 9.0}};
+    CHECK_THAT(styleAdjustment({"navy"}, extreme), WithinAbs(0.3, 1e-9));
+}

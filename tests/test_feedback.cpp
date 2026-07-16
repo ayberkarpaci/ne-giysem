@@ -264,3 +264,34 @@ TEST_CASE("manual outfits: title round-trip and full removal") {
     CHECK_FALSE(repo.removeRecommendation(id));
     CHECK_FALSE(repo.setOutfitTitle(id, "gone"));
 }
+
+TEST_CASE("stylePreferences learns attribute weights from ratings") {
+    Database db = makeSeededDb();
+    negiysem::WardrobeRepository wardrobe(db);
+    const int navy_tee = wardrobe.addItem("t-shirt", "", {"navy", "cotton"});
+    const int neon_top = wardrobe.addItem("t-shirt", "", {"yellow"});
+
+    FeedbackRepository repo(db);
+    RecommendedItem navy_piece;
+    navy_piece.item_slug = "t-shirt";
+    navy_piece.wardrobe_id = navy_tee;
+    RecommendedItem neon_piece;
+    neon_piece.item_slug = "t-shirt";
+    neon_piece.wardrobe_id = neon_top;
+
+    const auto request = coldCozyRequest();
+    repo.addFeedback(repo.recordRecommendation(request, {navy_piece}, "wardrobe"), 5, "");
+    repo.addFeedback(repo.recordRecommendation(request, {neon_piece}, "wardrobe"), 1, "");
+
+    const auto prefs = repo.stylePreferences();
+    // One observation each: mean +/-1.0 damped by 1/5.
+    CHECK_THAT(prefs.at("navy"), WithinAbs(0.2, 1e-9));
+    CHECK_THAT(prefs.at("cotton"), WithinAbs(0.2, 1e-9));
+    CHECK_THAT(prefs.at("yellow"), WithinAbs(-0.2, 1e-9));
+
+    // More consistent evidence strengthens the weight (damping fades).
+    for (int i = 0; i < 4; ++i) {
+        repo.addFeedback(repo.recordRecommendation(request, {navy_piece}, "wardrobe"), 5, "");
+    }
+    CHECK_THAT(repo.stylePreferences().at("navy"), WithinAbs(1.0, 1e-9));
+}

@@ -41,7 +41,9 @@ the phases below move harmony, formality and learning into our own algorithm.
 
 ## Phase 3 — A stylist that knows you
 
-- [ ] **3.1 Style profile** — attribute preference weights learned from ratings.
+- [x] **3.1 Style profile** — attribute preference weights learned from
+  ratings: each value slug carries a mean rating signal in [-1, 1] damped
+  by observation count; ±0.1/point (capped ±0.3) in wardrobe scoring.
 - [ ] **3.2 Structured explanation + confidence score** — checklist reasons
   and a confidence percentage instead of a single sentence.
 - [ ] **3.3 Wardrobe analytics** — distribution dashboard, gap analysis,
