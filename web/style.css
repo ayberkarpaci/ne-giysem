@@ -1325,6 +1325,104 @@ select:focus {
     white-space: nowrap;
 }
 
+/* ---- the ANALYSIS tab ---- */
+
+.analytics-panel {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr));
+    gap: 1rem;
+    padding: 1rem 0.2rem;
+}
+
+.an-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1.1rem 1.2rem;
+    box-shadow: var(--shadow);
+}
+
+.an-title {
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 0.8rem;
+}
+
+.an-stats {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr));
+    gap: 0.8rem;
+    background: transparent;
+    border: none;
+    box-shadow: none;
+    padding: 0;
+}
+
+.stat-tile {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 0.9rem 1.1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+}
+
+.stat-tile strong {
+    font-family: var(--serif);
+    font-size: 1.7rem;
+    font-weight: 500;
+}
+
+.stat-tile span {
+    font-size: 0.72rem;
+    font-weight: 650;
+    color: var(--muted);
+}
+
+.bar-row {
+    display: grid;
+    grid-template-columns: 7rem minmax(0, 1fr) 2.6rem;
+    align-items: center;
+    gap: 0.6rem;
+    margin-bottom: 0.45rem;
+    font-size: 0.78rem;
+}
+
+.bar-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-weight: 600;
+}
+
+.bar-track {
+    height: 0.55rem;
+    border-radius: 999px;
+    background: var(--bg-soft);
+    overflow: hidden;
+}
+
+.bar-track span {
+    display: block;
+    height: 100%;
+    border-radius: 999px;
+    min-width: 0.55rem;
+}
+
+.bar-value {
+    text-align: right;
+    color: var(--muted);
+    font-weight: 650;
+    font-size: 0.72rem;
+    white-space: nowrap;
+}
+
 /* ---- detail slide-in panel ---- */
 
 .panel-backdrop {

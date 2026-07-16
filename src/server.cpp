@@ -612,6 +612,127 @@ bool Server::run(int port) {
         }
     });
 
+    // Wardrobe analytics: distribution, wear stats and coverage gaps for
+    // the ANALYSIS tab. Everything is computed live from the database.
+    server.Get("/api/analytics", [this](const httplib::Request& req, httplib::Response& res) {
+        try {
+            const std::string lang = req.get_param_value("lang");
+            sqlite3* db = db_.handle();
+            const auto rows = [db](const std::string& sql,
+                                   const std::string& bind_text = "") {
+                std::vector<std::vector<std::string>> out;
+                sqlite3_stmt* stmt = nullptr;
+                if (sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, nullptr) != SQLITE_OK) {
+                    throw std::runtime_error(std::string("prepare failed: ") +
+                                             sqlite3_errmsg(db));
+                }
+                if (!bind_text.empty()) {
+                    sqlite3_bind_text(stmt, 1, bind_text.c_str(), -1, SQLITE_TRANSIENT);
+                }
+                while (sqlite3_step(stmt) == SQLITE_ROW) {
+                    std::vector<std::string> row;
+                    for (int c = 0; c < sqlite3_column_count(stmt); ++c) {
+                        const unsigned char* text = sqlite3_column_text(stmt, c);
+                        row.push_back(text ? reinterpret_cast<const char*>(text) : "");
+                    }
+                    out.push_back(std::move(row));
+                }
+                sqlite3_finalize(stmt);
+                return out;
+            };
+
+            const auto totals = rows(
+                "SELECT COUNT(*), COALESCE(SUM(is_dirty), 0), "
+                "SUM(CASE WHEN cutout_path IS NOT NULL AND cutout_path != '' "
+                "THEN 1 ELSE 0 END), "
+                "SUM(CASE WHEN NOT EXISTS (SELECT 1 FROM wear_history h "
+                "WHERE h.wardrobe_item_id = wardrobe_items.id) THEN 1 ELSE 0 END) "
+                "FROM wardrobe_items;");
+
+            json categories = json::array();
+            for (const auto& row : rows(R"sql(
+                SELECT c.slug, COALESCE(tc.name, c.slug), COUNT(*)
+                FROM wardrobe_items w
+                JOIN clothing_items i ON i.id = w.type_id
+                JOIN clothing_categories c ON c.id = i.category_id
+                LEFT JOIN translations tc ON tc.entity_type = 'category'
+                     AND tc.entity_id = c.id AND tc.lang_code = ?1
+                GROUP BY c.slug ORDER BY COUNT(*) DESC;)sql", lang)) {
+                categories.push_back({{"slug", row[0]}, {"name", row[1]},
+                                      {"count", std::stoi(row[2])}});
+            }
+
+            json colors = json::array();
+            for (const auto& row : rows(R"sql(
+                SELECT v.slug, COALESCE(tv.name, v.slug), COUNT(*)
+                FROM wardrobe_item_attributes wa
+                JOIN attribute_values v ON v.id = wa.attribute_value_id
+                JOIN attributes a ON a.id = v.attribute_id AND a.slug = 'color'
+                LEFT JOIN translations tv ON tv.entity_type = 'attribute_value'
+                     AND tv.entity_id = v.id AND tv.lang_code = ?1
+                GROUP BY v.slug ORDER BY COUNT(*) DESC LIMIT 8;)sql", lang)) {
+                colors.push_back({{"slug", row[0]}, {"name", row[1]},
+                                  {"count", std::stoi(row[2])}});
+            }
+
+            json most_worn = json::array();
+            for (const auto& row : rows(R"sql(
+                SELECT CASE WHEN w.label IS NOT NULL AND w.label != ''
+                            THEN w.label ELSE COALESCE(ti.name, i.slug) END,
+                       COUNT(h.id), w.id
+                FROM wear_history h
+                JOIN wardrobe_items w ON w.id = h.wardrobe_item_id
+                JOIN clothing_items i ON i.id = w.type_id
+                LEFT JOIN translations ti ON ti.entity_type = 'item'
+                     AND ti.entity_id = i.id AND ti.lang_code = ?1
+                GROUP BY w.id ORDER BY COUNT(h.id) DESC LIMIT 5;)sql", lang)) {
+                most_worn.push_back({{"name", row[0]}, {"wears", std::stoi(row[1])},
+                                     {"wardrobe_id", std::stoi(row[2])}});
+            }
+
+            // Coverage gaps: a core category misses a temperature band when
+            // no owned piece's comfort range touches it. (Hot outerwear is
+            // nobody's gap.)
+            json gaps = json::array();
+            const std::vector<std::pair<std::string, std::pair<double, double>>> bands = {
+                {"cold", {-10.0, 10.0}}, {"mild", {10.0, 20.0}}, {"hot", {20.0, 35.0}}};
+            for (const char* category : {"top", "bottom", "footwear", "outerwear"}) {
+                for (const auto& [band, range] : bands) {
+                    if (std::string(category) == "outerwear" && band == "hot") continue;
+                    const auto hit = rows(
+                        "SELECT COUNT(*) FROM wardrobe_items w "
+                        "JOIN clothing_items i ON i.id = w.type_id "
+                        "JOIN clothing_categories c ON c.id = i.category_id "
+                        "WHERE c.slug = '" + std::string(category) + "' "
+                        "AND (i.min_temp_c IS NULL OR i.min_temp_c <= " +
+                        std::to_string(range.second) + ") "
+                        "AND (i.max_temp_c IS NULL OR i.max_temp_c >= " +
+                        std::to_string(range.first) + ");");
+                    if (!hit.empty() && std::stoi(hit[0][0]) == 0) {
+                        gaps.push_back({{"category", category}, {"band", band}});
+                    }
+                }
+            }
+
+            res.set_content(
+                json{
+                    {"total", std::stoi(totals[0][0])},
+                    {"dirty", std::stoi(totals[0][1])},
+                    {"with_cutout", totals[0][2].empty() ? 0 : std::stoi(totals[0][2])},
+                    {"never_worn", totals[0][3].empty() ? 0 : std::stoi(totals[0][3])},
+                    {"categories", categories},
+                    {"colors", colors},
+                    {"most_worn", most_worn},
+                    {"gaps", gaps},
+                }
+                    .dump(),
+                "application/json");
+        } catch (const std::exception& e) {
+            res.status = 500;
+            res.set_content(json{{"error", e.what()}}.dump(), "application/json");
+        }
+    });
+
     // The outfit builder: the user composes an outfit from their own
     // pieces and names it; it lands in the OUTFITS tab as source 'manual'.
     server.Post("/api/outfits", [this](const httplib::Request& req, httplib::Response& res) {

@@ -59,6 +59,20 @@ const STRINGS = {
         "check_patterns-calm": "Patterns balanced",
         "check_loved-pair": "A duo you loved before",
         "check_style-match": "Matches your style profile",
+        analytics_tab: "Analysis",
+        an_total: "pieces",
+        an_dirty: "in the laundry",
+        an_never: "never worn",
+        an_cutout: "with clean cutouts",
+        an_categories: "By category",
+        an_colors: "Color palette",
+        an_most_worn: "Most worn",
+        an_gaps: "Wardrobe gaps",
+        an_no_gaps: "No gaps — every core category covers cold, mild and hot days. 👌",
+        an_no_wears: "No wears logged yet — tap \"I wore this\" under a recommendation.",
+        gap_line: (category, band) =>
+            `No ${category.toLowerCase()} for ${band === "cold" ? "cold" : band === "hot" ? "hot" : "mild"} days`,
+        wears_unit: (n) => `${n}×`,
         ask_no_key: "The Gemini API key is not set up yet (see .env).",
         wardrobe_title: "My wardrobe",
         wardrobe_empty: "No items yet — add your first piece below!",
@@ -197,6 +211,20 @@ const STRINGS = {
         "check_patterns-calm": "Desenler dengeli",
         "check_loved-pair": "Daha önce sevdiğin bir ikili",
         "check_style-match": "Stil profiline uygun",
+        analytics_tab: "Analiz",
+        an_total: "parça",
+        an_dirty: "kirli sepetinde",
+        an_never: "hiç giyilmemiş",
+        an_cutout: "temiz kesimli",
+        an_categories: "Kategoriye göre",
+        an_colors: "Renk paleti",
+        an_most_worn: "En çok giyilenler",
+        an_gaps: "Gardırop boşlukları",
+        an_no_gaps: "Boşluk yok — her temel kategori soğuk, ılık ve sıcak günleri kapsıyor. 👌",
+        an_no_wears: "Henüz giyme kaydı yok — öneri altındaki \"Bunu giydim\"e dokun.",
+        gap_line: (category, band) =>
+            `${band === "cold" ? "Soğuk" : band === "hot" ? "Sıcak" : "Ilık"} günler için ${category.toLowerCase()} eksik`,
+        wears_unit: (n) => `${n} kez`,
         ask_no_key: "Gemini API anahtarı henüz ayarlanmamış (.env dosyasına bak).",
         wardrobe_title: "Gardırobum",
         wardrobe_empty: "Henüz kıyafet yok — aşağıdan ilk parçanı ekle!",
@@ -1015,13 +1043,26 @@ const CATEGORY_ORDER =
     ["outerwear", "top", "bottom", "one-piece", "footwear", "accessory", "jewelry"];
 
 let wardrobeItems = [];
-let wardrobeFilter = "all";   // a category slug, "all" or "outfits"
+let wardrobeFilter = "all";   // a category slug, "all", "outfits" or "analytics"
 let extractRunning = false;
 let savedOutfits = null;      // cache for the OUTFITS tab; null = not loaded
+let analyticsCache = null;    // cache for the ANALYSIS tab; null = not loaded
+
+// Swatch colors for the analytics palette bars.
+const COLOR_HEX = {
+    black: "#1f1f24", white: "#f4f4f2", gray: "#9aa0a6", charcoal: "#3c4043",
+    navy: "#1f3a5f", blue: "#3b82f6", red: "#dc2626", green: "#16a34a",
+    yellow: "#eab308", pink: "#ec4899", purple: "#8b5cf6", orange: "#f97316",
+    brown: "#8b5e34", beige: "#d9c7a7", cream: "#efe3cd", khaki: "#b0a06a",
+    turquoise: "#14b8a6", olive: "#708238", burgundy: "#800020",
+    mustard: "#d4a017", teal: "#0d9488", lilac: "#c8a2c8", mint: "#98e4c0",
+    coral: "#ff7f6b", silver: "#c8ccd2", gold: "#d4af37",
+};
 
 async function loadWardrobe() {
     const data = await fetchJson(`/api/wardrobe?lang=${lang}`);
-    savedOutfits = null;  // items or language changed; refetch on demand
+    savedOutfits = null;   // items or language changed; refetch on demand
+    analyticsCache = null;
     wardrobeItems = data.items;
     wardrobeCount = data.items.length;
     $("wardrobe-empty").classList.toggle("hidden", wardrobeCount > 0);
@@ -1036,7 +1077,7 @@ async function loadWardrobe() {
 function renderWardrobe() {
     const present = CATEGORY_ORDER.filter(
         (slug) => wardrobeItems.some((item) => item.category_slug === slug));
-    if (!["all", "outfits"].includes(wardrobeFilter) &&
+    if (!["all", "outfits", "analytics"].includes(wardrobeFilter) &&
         !present.includes(wardrobeFilter)) {
         wardrobeFilter = "all";
     }
@@ -1062,16 +1103,139 @@ function renderWardrobe() {
         addTab(slug, item.category_name);
     }
     addTab("outfits", t("outfits_tab"), "outfits-tab");
+    addTab("analytics", t("analytics_tab"));
 
     const showOutfits = wardrobeFilter === "outfits";
-    $("wardrobe-gallery").classList.toggle("hidden", showOutfits);
+    const showAnalytics = wardrobeFilter === "analytics";
+    $("wardrobe-gallery").classList.toggle("hidden", showOutfits || showAnalytics);
     $("outfits-gallery").classList.toggle("hidden", !showOutfits);
+    $("analytics-panel").classList.toggle("hidden", !showAnalytics);
     if (showOutfits) {
         renderOutfits();
+    } else if (showAnalytics) {
+        renderAnalytics();
     } else {
         renderGallery();
     }
     renderExtractBar();
+}
+
+// ---- the ANALYSIS tab: distribution, wear stats and gaps ----
+
+async function renderAnalytics() {
+    const panel = $("analytics-panel");
+    if (analyticsCache === null) {
+        try {
+            analyticsCache = await fetchJson(`/api/analytics?lang=${lang}`);
+        } catch (err) {
+            console.error(err);
+            showError(t("error"), "wardrobe-error");
+            return;
+        }
+    }
+    const a = analyticsCache;
+    $("lookbook-count").textContent = t("items_count")(a.total);
+    panel.innerHTML = "";
+
+    const card = (titleKey) => {
+        const div = document.createElement("div");
+        div.className = "an-card";
+        if (titleKey) {
+            const h = document.createElement("h3");
+            h.className = "an-title";
+            h.textContent = t(titleKey);
+            div.appendChild(h);
+        }
+        panel.appendChild(div);
+        return div;
+    };
+
+    // Stat tiles.
+    const stats = card(null);
+    stats.classList.add("an-stats");
+    for (const [value, key] of [[a.total, "an_total"], [a.dirty, "an_dirty"],
+                                [a.never_worn, "an_never"],
+                                [a.with_cutout, "an_cutout"]]) {
+        const tile = document.createElement("div");
+        tile.className = "stat-tile";
+        const num = document.createElement("strong");
+        num.textContent = value;
+        const label = document.createElement("span");
+        label.textContent = t(key);
+        tile.append(num, label);
+        stats.appendChild(tile);
+    }
+
+    // Category distribution bars.
+    const cats = card("an_categories");
+    const maxCat = Math.max(1, ...a.categories.map((c) => c.count));
+    for (const c of a.categories) {
+        cats.appendChild(barRow(c.name, c.count, c.count / maxCat, "var(--accent)"));
+    }
+
+    // Color palette bars with real swatch colors.
+    const cols = card("an_colors");
+    const maxColor = Math.max(1, ...a.colors.map((c) => c.count));
+    for (const c of a.colors) {
+        cols.appendChild(barRow(c.name, c.count, c.count / maxColor,
+                                COLOR_HEX[c.slug] || "#9aa0a6"));
+    }
+
+    // Most worn pieces.
+    const worn = card("an_most_worn");
+    if (a.most_worn.length === 0) {
+        const note = document.createElement("p");
+        note.className = "note";
+        note.textContent = t("an_no_wears");
+        worn.appendChild(note);
+    }
+    const maxWears = Math.max(1, ...a.most_worn.map((m) => m.wears));
+    for (const m of a.most_worn) {
+        worn.appendChild(barRow(m.name, t("wears_unit")(m.wears),
+                                m.wears / maxWears, "var(--ink)"));
+    }
+
+    // Gaps.
+    const gaps = card("an_gaps");
+    if (a.gaps.length === 0) {
+        const note = document.createElement("p");
+        note.className = "note";
+        note.textContent = t("an_no_gaps");
+        gaps.appendChild(note);
+    } else {
+        const list = document.createElement("div");
+        list.className = "detail-tags";
+        const categoryNames = {};
+        for (const item of wardrobeItems) {
+            categoryNames[item.category_slug] = item.category_name;
+        }
+        for (const gap of a.gaps) {
+            const tag = document.createElement("span");
+            tag.textContent =
+                t("gap_line")(categoryNames[gap.category] || gap.category, gap.band);
+            list.appendChild(tag);
+        }
+        gaps.appendChild(list);
+    }
+}
+
+function barRow(label, value, fraction, color) {
+    const row = document.createElement("div");
+    row.className = "bar-row";
+    const name = document.createElement("span");
+    name.className = "bar-label";
+    name.textContent = label;
+    const track = document.createElement("span");
+    track.className = "bar-track";
+    const fill = document.createElement("span");
+    fill.style.width = `${Math.round(fraction * 100)}%`;
+    fill.style.background = color;
+    track.appendChild(fill);
+    const count = document.createElement("span");
+    count.className = "bar-value";
+    count.textContent = value;
+    row.append(name, track, count);
+    return row;
 }
 
 function galleryItems() {
@@ -1100,11 +1264,13 @@ function renderExtractBar() {
     btn.textContent = t("extract_all")(missing.length);
     btn.disabled = extractRunning;
     btn.classList.toggle("hidden",
-        missing.length === 0 || wardrobeFilter === "outfits");
+        missing.length === 0 || wardrobeFilter === "outfits" ||
+        wardrobeFilter === "analytics");
     if (!extractRunning) $("extract-status").textContent = "";
     // The builder belongs to the OUTFITS view; photo upload to the rest.
     $("create-outfit-btn").classList.toggle("hidden", wardrobeFilter !== "outfits");
-    $("add-btn").classList.toggle("hidden", wardrobeFilter === "outfits");
+    $("add-btn").classList.toggle("hidden",
+        wardrobeFilter === "outfits" || wardrobeFilter === "analytics");
 }
 
 // Sends every photo that has no cutout yet through the extraction endpoint,

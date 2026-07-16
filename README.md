@@ -55,6 +55,8 @@ Main API endpoints (see `include/server.h` for the full list):
 - `POST /api/outfits` — the outfit builder: save a named outfit composed
   from your own pieces (`{title, wardrobe_ids}`)
 - `DELETE /api/recommendations/{id}` — remove an outfit from the history
+- `GET /api/analytics` — wardrobe distribution, wear stats and
+  temperature-band coverage gaps (the ANALYSIS tab)
 - `POST /api/recommendations/{id}/worn` — "I wore this": logs a wear for
   every wardrobe piece of the outfit (feeds variety and the laundry state)
 - `PUT /api/wardrobe/{id}/laundry` — move an item in/out of the laundry

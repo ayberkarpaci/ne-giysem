@@ -48,8 +48,10 @@ the phases below move harmony, formality and learning into our own algorithm.
   checklist (weather fit, rain readiness, formality, colors, patterns,
   loved pairs, style match) plus a deterministic 35-97% confidence, shown
   as a meter over the stylist's sentence.
-- [ ] **3.3 Wardrobe analytics** — distribution dashboard, gap analysis,
-  missing-piece suggestions; optional cost-per-wear.
+- [x] **3.3 Wardrobe analytics** — ANALYSIS tab: stat tiles (total, laundry,
+  never worn, cutouts), category and color distribution bars, most-worn
+  list, and temperature-band gap analysis for the core categories.
+  (Cost-per-wear deferred: no price data yet.)
 
 ## Phase 4 — Efficiency & platform (as needed)
 
