@@ -37,13 +37,15 @@ struct SavedOutfitItem {
     std::string cutout_path;
 };
 
-// A saved outfit for the lookbook: the pieces plus the stylist's reason.
+// A saved outfit for the lookbook: the pieces plus the stylist's reason,
+// or the user's own creation (source 'manual') with its given title.
 struct SavedOutfit {
     int id = 0;
     std::string created_at;
     std::string source;
     std::string mood_slug;
     std::string explanation;
+    std::string title;  // user-given, usually only on manual outfits
     std::vector<SavedOutfitItem> items;
 };
 
@@ -63,6 +65,13 @@ public:
     // OUTFITS tab. Item names prefer the user's label, localized type
     // names otherwise.
     std::vector<SavedOutfit> listOutfits(const std::string& lang, int limit) const;
+
+    // Names a saved outfit (the outfit builder). False when the id is unknown.
+    bool setOutfitTitle(int recommendation_id, const std::string& title);
+
+    // Removes a saved outfit and everything hanging off it (items,
+    // feedback, tags). False when the id is unknown.
+    bool removeRecommendation(int recommendation_id);
 
     // Stores a 1-5 rating with an optional comment and optional one-tap
     // reason tags. Returns false when the recommendation id is unknown;

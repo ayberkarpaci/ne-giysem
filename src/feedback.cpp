@@ -98,8 +98,8 @@ std::vector<SavedOutfit> FeedbackRepository::listOutfits(const std::string& lang
     {
         Statement stmt(db,
                        "SELECT id, created_at, source, COALESCE(mood_slug, ''), "
-                       "COALESCE(explanation, '') FROM recommendations "
-                       "ORDER BY id DESC LIMIT ?1;");
+                       "COALESCE(explanation, ''), COALESCE(title, '') "
+                       "FROM recommendations ORDER BY id DESC LIMIT ?1;");
         stmt.bindInt(1, limit);
         while (stmt.step()) {
             SavedOutfit outfit;
@@ -108,6 +108,7 @@ std::vector<SavedOutfit> FeedbackRepository::listOutfits(const std::string& lang
             outfit.source = stmt.columnText(2);
             outfit.mood_slug = stmt.columnText(3);
             outfit.explanation = stmt.columnText(4);
+            outfit.title = stmt.columnText(5);
             outfits.push_back(std::move(outfit));
         }
     }
@@ -150,6 +151,21 @@ const std::vector<std::string>& FeedbackRepository::allowedTags() {
         "uncomfortable",
     };
     return tags;
+}
+
+bool FeedbackRepository::setOutfitTitle(int recommendation_id, const std::string& title) {
+    Statement stmt(db_.handle(), "UPDATE recommendations SET title = ?1 WHERE id = ?2;");
+    stmt.bindText(1, title);
+    stmt.bindInt(2, recommendation_id);
+    stmt.step();
+    return sqlite3_changes(db_.handle()) > 0;
+}
+
+bool FeedbackRepository::removeRecommendation(int recommendation_id) {
+    Statement stmt(db_.handle(), "DELETE FROM recommendations WHERE id = ?1;");
+    stmt.bindInt(1, recommendation_id);
+    stmt.step();
+    return sqlite3_changes(db_.handle()) > 0;
 }
 
 bool FeedbackRepository::addFeedback(int recommendation_id, int rating,

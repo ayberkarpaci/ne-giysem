@@ -98,6 +98,13 @@ const STRINGS = {
         name_saved: "Saved ✓",
         mood_tag: (name) => name,
         outfit_desc_fallback: "Put together for your weather and mood.",
+        stage_hint: "Tell me your plan or tap \"What should I wear?\" — your outfit appears here.",
+        create_outfit: "➕ Create an outfit",
+        builder_name: "Outfit name (optional)",
+        builder_pick: "Tap pieces to add them to the look:",
+        builder_save: "Save outfit",
+        builder_need: "Pick at least two pieces.",
+        delete_outfit: "🗑 Delete this look",
         worn_button: "👕 I wore this",
         worn_thanks: (n) => `Noted — ${n} piece${n === 1 ? "" : "s"} logged.`,
         worn_error: "Could not log the wear.",
@@ -213,6 +220,13 @@ const STRINGS = {
         name_saved: "Kaydedildi ✓",
         mood_tag: (name) => name,
         outfit_desc_fallback: "Havana ve ruh hâline göre bir araya getirildi.",
+        stage_hint: "Planını anlat ya da \"Ne giysem?\"e dokun — kombinin burada belirecek.",
+        create_outfit: "➕ Kombin oluştur",
+        builder_name: "Kombin adı (isteğe bağlı)",
+        builder_pick: "Kombine eklemek için parçalara dokun:",
+        builder_save: "Kombini kaydet",
+        builder_need: "En az iki parça seç.",
+        delete_outfit: "🗑 Bu kombini sil",
         worn_button: "👕 Bunu giydim",
         worn_thanks: (n) => `Not edildi — ${n} parça kaydedildi.`,
         worn_error: "Giyme kaydedilemedi.",
@@ -664,6 +678,7 @@ async function recommend() {
         $("explanation").textContent = data.explanation || "";
         $("explanation").classList.toggle("hidden", !data.explanation);
         renderFeedback("feedback-box", data.recommendation_id, "outfit-list");
+        $("stage-empty").classList.add("hidden");
         $("result").classList.remove("hidden");
         savedOutfits = null;  // a new look was saved for the OUTFITS tab
     } catch (err) {
@@ -697,6 +712,7 @@ async function ask() {
         renderOutfitList($("ask-outfit-list"), data.outfit);
         $("ask-explanation").textContent = data.explanation || "";
         renderFeedback("ask-feedback-box", data.recommendation_id, "ask-outfit-list");
+        $("stage-empty").classList.add("hidden");
         $("ask-result").classList.remove("hidden");
         savedOutfits = null;  // a new look was saved for the OUTFITS tab
     } catch (err) {
@@ -905,6 +921,9 @@ function renderExtractBar() {
     btn.classList.toggle("hidden",
         missing.length === 0 || wardrobeFilter === "outfits");
     if (!extractRunning) $("extract-status").textContent = "";
+    // The builder belongs to the OUTFITS view; photo upload to the rest.
+    $("create-outfit-btn").classList.toggle("hidden", wardrobeFilter !== "outfits");
+    $("add-btn").classList.toggle("hidden", wardrobeFilter === "outfits");
 }
 
 // Sends every photo that has no cutout yet through the extraction endpoint,
@@ -1297,16 +1316,38 @@ async function renderOutfits() {
         }
         const label = document.createElement("span");
         label.className = "look-tile-label";
-        label.textContent = `${t("look_word")} ${number}`;
-        tile.append(visual, label);
+        label.textContent = outfit.title || `${t("look_word")} ${number}`;
+
+        const del = document.createElement("button");
+        del.className = "delete-btn";
+        del.textContent = "✕";
+        del.title = t("delete_outfit");
+        del.addEventListener("click", (e) => {
+            e.stopPropagation();
+            deleteOutfit(outfit.id);
+        });
+
+        tile.append(visual, label, del);
         tile.addEventListener("click", () => openOutfitPanel(outfit, number));
         grid.appendChild(tile);
     });
 }
 
+async function deleteOutfit(id) {
+    try {
+        await fetchJson(`/api/recommendations/${id}`, { method: "DELETE" });
+        savedOutfits = null;
+        closePanel();
+        renderWardrobe();
+    } catch (err) {
+        console.error(err);
+        showError(t("error"), "wardrobe-error");
+    }
+}
+
 function openOutfitPanel(outfit, number) {
     const panel = openPanel();
-    panelHead(panel, `${t("look_word")} ${number}`, /*plain=*/true);
+    panelHead(panel, outfit.title || `${t("look_word")} ${number}`, /*plain=*/true);
 
     const board = buildLookBoard(outfit.items);
     if (board) {
@@ -1354,6 +1395,119 @@ function openOutfitPanel(outfit, number) {
         tags.appendChild(tag);
     }
     panel.appendChild(tags);
+
+    const danger = document.createElement("div");
+    danger.className = "panel-danger";
+    const del = document.createElement("button");
+    del.className = "ghost-btn";
+    del.textContent = t("delete_outfit");
+    del.addEventListener("click", () => deleteOutfit(outfit.id));
+    danger.appendChild(del);
+    panel.appendChild(danger);
+}
+
+// ---- the outfit builder: compose and name your own look ----
+
+function openBuilderPanel() {
+    const panel = openPanel();
+    panelHead(panel, t("create_outfit"));
+
+    const nameSection = panelSection(panel, t("builder_name"));
+    const nameInput = document.createElement("input");
+    nameInput.type = "text";
+    nameInput.maxLength = 60;
+    nameInput.style.width = "100%";
+    nameSection.appendChild(nameInput);
+
+    // Live preview of the picked pieces, composed like a look board.
+    const preview = document.createElement("div");
+    preview.className = "look-board builder-preview";
+    panel.appendChild(preview);
+
+    const selected = new Set();
+    const refreshPreview = () => {
+        const items = wardrobeItems.filter((i) => selected.has(i.id)).map((i) => ({
+            category_slug: i.category_slug,
+            item_name: i.label || i.type_name,
+            cutout_url: i.cutout_url,
+            photo_url: i.photo_url,
+        }));
+        preview.innerHTML = "";
+        const board = buildLookBoard(items);
+        if (board) {
+            while (board.firstChild) preview.appendChild(board.firstChild);
+        }
+        preview.classList.toggle("hidden", !preview.firstChild);
+        save.disabled = selected.size < 2;
+    };
+
+    const pickSection = panelSection(panel, t("builder_pick"));
+    for (const slug of CATEGORY_ORDER) {
+        const items = wardrobeItems.filter((i) => i.category_slug === slug);
+        if (items.length === 0) continue;
+        const caption = document.createElement("span");
+        caption.className = "swatch-caption";
+        caption.style.display = "block";
+        caption.style.margin = "0.5rem 0 0.25rem";
+        caption.textContent = items[0].category_name;
+        pickSection.appendChild(caption);
+        const row = document.createElement("div");
+        row.className = "builder-grid";
+        for (const item of items) {
+            const cell = document.createElement("button");
+            cell.type = "button";
+            cell.className = "builder-cell";
+            if (item.cutout_url || item.photo_url) {
+                const img = document.createElement("img");
+                img.src = item.cutout_url || item.photo_url;
+                img.alt = item.label || item.type_name;
+                img.loading = "lazy";
+                cell.appendChild(img);
+            } else {
+                cell.textContent = CATEGORY_EMOJI[slug] || "👔";
+            }
+            cell.title = item.label || item.type_name;
+            cell.addEventListener("click", () => {
+                if (selected.has(item.id)) {
+                    selected.delete(item.id);
+                } else {
+                    selected.add(item.id);
+                }
+                cell.classList.toggle("selected", selected.has(item.id));
+                refreshPreview();
+            });
+            row.appendChild(cell);
+        }
+        pickSection.appendChild(row);
+    }
+
+    const save = document.createElement("button");
+    save.className = "btn";
+    save.textContent = t("builder_save");
+    save.disabled = true;
+    save.title = t("builder_need");
+    save.addEventListener("click", async () => {
+        save.disabled = true;
+        try {
+            await fetchJson("/api/outfits", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    title: nameInput.value.trim(),
+                    wardrobe_ids: [...selected],
+                }),
+            });
+            savedOutfits = null;
+            closePanel();
+            wardrobeFilter = "outfits";
+            renderWardrobe();
+        } catch (err) {
+            console.error(err);
+            save.disabled = false;
+            showError(t("save_error"), "wardrobe-error");
+        }
+    });
+    panel.appendChild(save);
 }
 
 // Classifies and saves one photo; updates its progress row. Returns true
@@ -1570,6 +1724,7 @@ function toggleAddPanel() {
 }
 $("add-toggle-btn").addEventListener("click", toggleAddPanel);
 $("add-btn").addEventListener("click", toggleAddPanel);
+$("create-outfit-btn").addEventListener("click", openBuilderPanel);
 $("panel-backdrop").addEventListener("click", closePanel);
 document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") closePanel();

@@ -107,7 +107,8 @@ CREATE TABLE IF NOT EXISTS recommendations (
     temperature_c REAL,
     is_raining    INTEGER NOT NULL DEFAULT 0,
     lang          TEXT,
-    explanation   TEXT                 -- the stylist's one-sentence reason
+    explanation   TEXT,                -- the stylist's one-sentence reason
+    title         TEXT                 -- user-given name for manual outfits
 );
 
 CREATE TABLE IF NOT EXISTS recommendation_items (
@@ -194,6 +195,10 @@ void Database::initSchema() {
     }
     try {
         execute("ALTER TABLE recommendation_items ADD COLUMN wardrobe_item_id INTEGER;");
+    } catch (const std::runtime_error&) {
+    }
+    try {
+        execute("ALTER TABLE recommendations ADD COLUMN title TEXT;");
     } catch (const std::runtime_error&) {
     }
     try {

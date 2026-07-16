@@ -584,12 +584,75 @@ bool Server::run(int port) {
                     {"mood_name",
                      mood_name != names.end() ? mood_name->second : outfit.mood_slug},
                     {"explanation", outfit.explanation},
+                    {"title", outfit.title},
                     {"items", items},
                 });
             }
             res.set_content(json{{"outfits", outfits}}.dump(), "application/json");
         } catch (const std::exception& e) {
             res.status = 500;
+            res.set_content(json{{"error", e.what()}}.dump(), "application/json");
+        }
+    });
+
+    // The outfit builder: the user composes an outfit from their own
+    // pieces and names it; it lands in the OUTFITS tab as source 'manual'.
+    server.Post("/api/outfits", [this](const httplib::Request& req, httplib::Response& res) {
+        try {
+            const json body = json::parse(req.body);
+            const std::string title = body.value("title", "");
+            const std::vector<int> wardrobe_ids =
+                body.at("wardrobe_ids").get<std::vector<int>>();
+            if (wardrobe_ids.empty()) {
+                res.status = 400;
+                res.set_content(json{{"error", "wardrobe_ids must not be empty"}}.dump(),
+                                "application/json");
+                return;
+            }
+            std::vector<RecommendedItem> items;
+            for (const auto& item : WardrobeRepository(db_).listItems("en")) {
+                if (std::find(wardrobe_ids.begin(), wardrobe_ids.end(), item.id) ==
+                    wardrobe_ids.end()) {
+                    continue;
+                }
+                RecommendedItem piece;
+                piece.item_slug = item.type_slug;
+                piece.category_slug = item.category_slug;
+                piece.wardrobe_id = item.id;
+                items.push_back(std::move(piece));
+            }
+            if (items.empty()) {
+                res.status = 404;
+                res.set_content(json{{"error", "no such wardrobe items"}}.dump(),
+                                "application/json");
+                return;
+            }
+            FeedbackRepository repo(db_);
+            const int id = repo.recordRecommendation(RecommendationRequest{}, items, "manual");
+            repo.setOutfitTitle(id, title);
+            res.status = 201;
+            res.set_content(json{{"id", id}, {"title", title}}.dump(), "application/json");
+        } catch (const std::exception& e) {
+            res.status = 400;
+            res.set_content(json{{"error", e.what()}}.dump(), "application/json");
+        }
+    });
+
+    // Removes an outfit from the history/lookbook (items, feedback and
+    // tags go with it).
+    server.Delete(R"(/api/recommendations/(\d+))",
+                  [this](const httplib::Request& req, httplib::Response& res) {
+        try {
+            const int id = std::stoi(req.matches[1]);
+            if (!FeedbackRepository(db_).removeRecommendation(id)) {
+                res.status = 404;
+                res.set_content(json{{"error", "no such recommendation"}}.dump(),
+                                "application/json");
+                return;
+            }
+            res.set_content(json{{"deleted", id}}.dump(), "application/json");
+        } catch (const std::exception& e) {
+            res.status = 400;
             res.set_content(json{{"error", e.what()}}.dump(), "application/json");
         }
     });

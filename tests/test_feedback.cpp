@@ -238,3 +238,29 @@ TEST_CASE("temperature offsets accumulate in bounded half-degree steps") {
     for (int i = 0; i < 30; ++i) repo.nudgeTemperature({"t-shirt"}, 0.5);
     CHECK_THAT(repo.temperatureOffsets().at("t-shirt"), WithinAbs(5.0, 1e-9));
 }
+
+TEST_CASE("manual outfits: title round-trip and full removal") {
+    Database db = makeSeededDb();
+    FeedbackRepository repo(db);
+    RecommendedItem tee;
+    tee.item_slug = "t-shirt";
+    RecommendedItem jeans;
+    jeans.item_slug = "jeans";
+
+    const int id = repo.recordRecommendation(RecommendationRequest{}, {tee, jeans}, "manual");
+    CHECK(repo.setOutfitTitle(id, "Weekend uniform"));
+    repo.addFeedback(id, 5, "", {"too-hot"});
+
+    auto outfits = repo.listOutfits("en", 10);
+    REQUIRE(outfits.size() == 1);
+    CHECK(outfits[0].title == "Weekend uniform");
+    CHECK(outfits[0].source == "manual");
+
+    // Removal takes the items, feedback and tags with it.
+    CHECK(repo.removeRecommendation(id));
+    CHECK(repo.listOutfits("en", 10).empty());
+    CHECK(repo.averageRatings().empty());
+    CHECK(repo.tagsFor(id).empty());
+    CHECK_FALSE(repo.removeRecommendation(id));
+    CHECK_FALSE(repo.setOutfitTitle(id, "gone"));
+}
