@@ -177,7 +177,8 @@ std::string outfitToJson(const std::vector<RecommendedItem>& outfit,
                          const std::string& mood_slug,
                          const std::string& source,
                          int recommendation_id,
-                         const std::string& explanation) {
+                         const std::string& explanation,
+                         const std::string& title) {
     json items = json::array();
     for (const auto& item : outfit) {
         items.push_back(itemToJson(item));
@@ -188,6 +189,7 @@ std::string outfitToJson(const std::vector<RecommendedItem>& outfit,
         {"source", source},
         {"outfit", items},
         {"explanation", explanation},
+        {"title", title},
     };
     if (recommendation_id > 0) body["recommendation_id"] = recommendation_id;
     return body.dump();
@@ -421,6 +423,7 @@ bool Server::run(int port) {
             // outfit here too; without one the rule-based picks still work.
             std::vector<RecommendedItem> outfit;
             std::string explanation;
+            std::string look_title;
             const std::string api_key = getConfigValue("GEMINI_API_KEY");
             if (!api_key.empty()) {
                 try {
@@ -442,6 +445,7 @@ bool Server::run(int port) {
                         .styleOutfit(context, candidates, conditions, request.lang);
                     outfit = styled.items;
                     explanation = styled.reason;
+                    look_title = styled.title;
                 } catch (const std::exception& e) {
                     std::cerr << "stylist failed: " << e.what() << std::endl;
                 }
@@ -454,8 +458,9 @@ bool Server::run(int port) {
 
             const int rec_id = FeedbackRepository(db_).recordRecommendation(
                 request, outfit, source, explanation);
+            if (!look_title.empty()) FeedbackRepository(db_).setOutfitTitle(rec_id, look_title);
             res.set_content(outfitToJson(outfit, weather, request.mood_slug, source, rec_id,
-                                         explanation),
+                                         explanation, look_title),
                             "application/json");
         } catch (const std::exception& e) {
             res.status = 500;
@@ -809,6 +814,7 @@ bool Server::run(int port) {
             // outfit is the fallback when it fails.
             std::vector<RecommendedItem> outfit;
             std::string explanation;
+            std::string look_title;
             try {
                 const auto candidates =
                     use_wardrobe ? recommender.candidatesFromWardrobe(request, 3)
@@ -817,6 +823,7 @@ bool Server::run(int port) {
                     gemini.styleOutfit(text, candidates, conditions, lang);
                 outfit = styled.items;
                 explanation = styled.reason;
+                look_title = styled.title;
             } catch (const std::exception& e) {
                 std::cerr << "stylist failed: " << e.what() << std::endl;
             }
@@ -836,6 +843,7 @@ bool Server::run(int port) {
 
             const int rec_id = FeedbackRepository(db_).recordRecommendation(
                 request, outfit, use_wardrobe ? "wardrobe" : "catalog", explanation);
+            if (!look_title.empty()) FeedbackRepository(db_).setOutfitTitle(rec_id, look_title);
             json items = json::array();
             for (const auto& item : outfit) {
                 items.push_back(itemToJson(item));
@@ -855,6 +863,7 @@ bool Server::run(int port) {
                     {"source", use_wardrobe ? "wardrobe" : "catalog"},
                     {"outfit", items},
                     {"explanation", explanation},
+                    {"title", look_title},
                 }
                     .dump(),
                 "application/json");
@@ -1045,6 +1054,7 @@ bool Server::run(int port) {
             // Same stylist pass as /api/ask, with the mood answer as context.
             std::vector<RecommendedItem> outfit;
             std::string explanation;
+            std::string look_title;
             try {
                 Weather conditions;
                 conditions.temperature_c = weather.temperature_c;
@@ -1056,6 +1066,7 @@ bool Server::run(int port) {
                     gemini.styleOutfit(text, candidates, conditions, lang);
                 outfit = styled.items;
                 explanation = styled.reason;
+                look_title = styled.title;
             } catch (const std::exception& e) {
                 std::cerr << "stylist failed: " << e.what() << std::endl;
             }
@@ -1075,6 +1086,7 @@ bool Server::run(int port) {
             }
             const int rec_id = FeedbackRepository(db_).recordRecommendation(
                 request, outfit, source, explanation);
+            if (!look_title.empty()) FeedbackRepository(db_).setOutfitTitle(rec_id, look_title);
             json items = json::array();
             for (const auto& item : outfit) {
                 items.push_back(itemToJson(item));
@@ -1087,6 +1099,7 @@ bool Server::run(int port) {
                     {"source", source},
                     {"outfit", items},
                     {"explanation", explanation},
+                    {"title", look_title},
                 }
                     .dump(),
                 "application/json");

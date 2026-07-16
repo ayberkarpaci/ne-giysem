@@ -5,113 +5,131 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>ne giysem?</title>
     <!-- The ?v= query busts stale browser caches; bump it when these files change. -->
-    <link rel="stylesheet" href="style.css?v=20260716">
+    <link rel="stylesheet" href="style.css?v=20260716b">
 </head>
 <body>
-    <header>
-        <h1>ne giysem?</h1>
-        <div class="lang-switch" role="group" aria-label="Language">
-            <button data-lang="en" class="active">EN</button>
-            <button data-lang="tr">TR</button>
+    <header class="topbar">
+        <h1 class="brand">ne giysem?</h1>
+        <nav class="tabs nav-group" role="tablist">
+            <button class="tab active" data-tab="home" data-i18n="tab_home">Outfit</button>
+            <button class="tab" data-tab="wardrobe">
+                <span data-i18n="tab_wardrobe">My wardrobe</span><span id="wardrobe-count" class="count hidden"></span>
+            </button>
+        </nav>
+        <div class="top-actions">
+            <span id="top-weather" class="weather-pill hidden"></span>
+            <div class="lang-switch" role="group" aria-label="Language">
+                <button data-lang="en" class="active">EN</button>
+                <button data-lang="tr">TR</button>
+            </div>
         </div>
     </header>
 
-    <nav class="tabs" role="tablist">
-        <button class="tab active" data-tab="home" data-i18n="tab_home">Outfit</button>
-        <button class="tab" data-tab="wardrobe">
-            <span data-i18n="tab_wardrobe">My wardrobe</span><span id="wardrobe-count" class="count hidden"></span>
-        </button>
-    </nav>
-
-    <main id="tab-home" class="wide home-grid">
-      <div class="home-controls">
-        <section class="card" id="ask-section">
-            <h2 data-i18n="ask_title">Tell me your plan</h2>
-            <textarea id="ask-input" rows="2" maxlength="300"></textarea>
-            <button id="ask-btn" class="btn" data-i18n="ask">Suggest an outfit</button>
-        </section>
-
-        <section class="card" id="mood-section">
-            <h2 data-i18n="mood_title">How do you feel today?</h2>
-            <textarea id="feel-input" rows="2" maxlength="300"></textarea>
-            <p class="note" data-i18n="mood_quick">...or pick one quickly:</p>
-            <div id="mood-chips" class="chips"></div>
-            <label class="toggle hidden" id="wardrobe-toggle">
-                <input type="checkbox" id="use-wardrobe" checked>
-                <span data-i18n="use_wardrobe">Recommend from my wardrobe</span>
-            </label>
-        </section>
-
-        <section class="card" id="weather-section">
-            <h2 data-i18n="weather_title">Weather &amp; location</h2>
-            <div class="weather-row">
-                <span><span data-i18n="location_label">Location</span>: <strong id="location-name">…</strong></span>
-                <button id="location-edit-btn" class="link-btn" data-i18n="change">change</button>
+    <main id="tab-home" class="home-shell">
+      <section class="stage">
+        <header class="stage-header">
+            <div>
+                <span class="eyebrow" data-i18n="stage_eyebrow">Today's outfit</span>
+                <div class="stage-name" id="outfit-title">—</div>
             </div>
-            <div id="location-editor" class="hidden">
-                <input type="text" id="city-input" maxlength="60" autocomplete="off">
-                <div id="city-results" class="chips"></div>
-                <button id="location-auto-btn" class="link-btn" data-i18n="auto_locate">Use my IP location</button>
-            </div>
-            <label class="hours-row">
-                <span data-i18n="hours_label">When will you be out?</span>
-                <span class="hours-selects">
-                    <select id="hour-start"></select>
-                    <span>–</span>
-                    <select id="hour-end"></select>
-                </span>
-            </label>
-            <label class="hours-row">
-                <span data-i18n="gender_label">Catalog suggestions for</span>
-                <select id="gender-select">
-                    <option value="" data-i18n="gender_any">everyone</option>
-                    <option value="male" data-i18n="gender_male">men</option>
-                    <option value="female" data-i18n="gender_female">women</option>
-                </select>
-            </label>
-            <label class="toggle">
-                <input type="checkbox" id="manual-weather">
-                <span data-i18n="manual_weather">I'll enter the weather myself</span>
-            </label>
-            <div id="manual-weather-fields" class="hidden">
-                <label>
-                    <span data-i18n="temp_label">Temperature (°C)</span>
-                    <input type="number" id="manual-temp" min="-30" max="50" step="0.5" value="20">
-                </label>
-                <label class="toggle">
-                    <input type="checkbox" id="manual-rain">
-                    <span data-i18n="rain_label">Rainy</span>
-                </label>
-            </div>
-        </section>
+            <div id="weather-line" class="stage-weather"></div>
+        </header>
 
-        <button id="recommend-btn" data-i18n="recommend">What should I wear?</button>
-        <p id="error" class="error hidden"></p>
-      </div>
-
-      <div class="home-stage">
-        <div id="stage-empty" class="stage-empty">
-            <span class="stage-emoji">🧥</span>
-            <p class="stage-hint" data-i18n="stage_hint">Tell me your plan or tap
-            "What should I wear?" — your outfit appears here.</p>
+        <div class="tryon-space">
+            <div id="stage-empty" class="stage-empty">
+                <span class="stage-emoji">🧥</span>
+                <p class="stage-hint" data-i18n="stage_hint">Tell me your plan or tap
+                "What should I wear?" — your outfit appears here.</p>
+            </div>
+            <div id="stage-board"></div>
         </div>
 
-        <section class="stage-card hidden" id="ask-result">
-            <div id="ask-weather-line" class="note"></div>
-            <ul id="ask-outfit-list" class="outfit"></ul>
-            <p id="ask-explanation" class="reason"></p>
-            <div class="feedback" id="ask-feedback-box"></div>
+        <footer class="suggestion-tray hidden" id="recent-tray">
+            <div class="tray-caption"><span data-i18n="recent_title">Recent looks</span>
+                <span class="tray-sub" data-i18n="recent_hint">Tap one to bring it back</span></div>
+            <div class="looks" id="recent-looks"></div>
+        </footer>
+      </section>
+
+      <aside class="sidebar">
+        <section class="side-section">
+            <h2 class="section-title" data-i18n="ask_title">Where are you heading?</h2>
+            <textarea id="ask-input" class="prompt-box" rows="2" maxlength="300"></textarea>
+            <div class="context-row" id="context-chips"></div>
+            <button id="context-edit-btn" class="small-link" data-i18n="edit_context">Adjust details</button>
+
+            <div id="context-editor" class="context-editor hidden">
+                <label class="editor-label" data-i18n="mood_title">How do you feel today?</label>
+                <textarea id="feel-input" rows="2" maxlength="300"></textarea>
+                <div id="mood-chips" class="chips"></div>
+                <label class="toggle hidden" id="wardrobe-toggle">
+                    <input type="checkbox" id="use-wardrobe" checked>
+                    <span data-i18n="use_wardrobe">Recommend from my wardrobe</span>
+                </label>
+                <div class="weather-row">
+                    <span><span data-i18n="location_label">Location</span>: <strong id="location-name">…</strong></span>
+                    <button id="location-edit-btn" class="link-btn" data-i18n="change">change</button>
+                </div>
+                <div id="location-editor" class="hidden">
+                    <input type="text" id="city-input" maxlength="60" autocomplete="off">
+                    <div id="city-results" class="chips"></div>
+                    <button id="location-auto-btn" class="link-btn" data-i18n="auto_locate">Use my IP location</button>
+                </div>
+                <label class="hours-row">
+                    <span data-i18n="hours_label">When will you be out?</span>
+                    <span class="hours-selects">
+                        <select id="hour-start"></select>
+                        <span>–</span>
+                        <select id="hour-end"></select>
+                    </span>
+                </label>
+                <label class="hours-row">
+                    <span data-i18n="gender_label">Catalog suggestions for</span>
+                    <select id="gender-select">
+                        <option value="" data-i18n="gender_any">everyone</option>
+                        <option value="male" data-i18n="gender_male">men</option>
+                        <option value="female" data-i18n="gender_female">women</option>
+                    </select>
+                </label>
+                <label class="toggle">
+                    <input type="checkbox" id="manual-weather">
+                    <span data-i18n="manual_weather">I'll enter the weather myself</span>
+                </label>
+                <div id="manual-weather-fields" class="hidden">
+                    <label>
+                        <span data-i18n="temp_label">Temperature (°C)</span>
+                        <input type="number" id="manual-temp" min="-30" max="50" step="0.5" value="20">
+                    </label>
+                    <label class="toggle">
+                        <input type="checkbox" id="manual-rain">
+                        <span data-i18n="rain_label">Rainy</span>
+                    </label>
+                </div>
+            </div>
         </section>
 
-        <section class="stage-card hidden" id="result">
-            <div id="weather-line" class="note"></div>
+        <section class="side-section hidden" id="why-section">
+            <h2 class="section-title" data-i18n="why_title">Why it works</h2>
+            <p id="explanation" class="stylist-note"></p>
             <div id="mood-line" class="note hidden"></div>
             <p id="source-note" class="note hidden" data-i18n="catalog_fallback"></p>
-            <ul id="outfit-list" class="outfit"></ul>
-            <p id="explanation" class="reason hidden"></p>
-            <div class="feedback" id="feedback-box"></div>
         </section>
-      </div>
+
+        <section class="items-area">
+            <div class="items-heading">
+                <h2 class="section-title" data-i18n="pieces_title">Chosen pieces</h2>
+                <span class="item-count" id="item-count"></span>
+            </div>
+            <ul id="outfit-list" class="outfit piece-list"></ul>
+            <div class="feedback" id="feedback-box"></div>
+            <p id="error" class="error hidden"></p>
+        </section>
+
+        <footer class="side-actions">
+            <button id="recommend-btn" class="primary" data-i18n="recommend">What should I wear?</button>
+            <button id="again-btn" class="round-action" title="↻">↻</button>
+        </footer>
+      </aside>
     </main>
 
     <main id="tab-wardrobe" class="hidden wide">
@@ -173,6 +191,6 @@
 
     <footer data-i18n="footer">Weather by open-meteo.com &middot; location by ip-api.com</footer>
 
-    <script src="app.js?v=20260716"></script>
+    <script src="app.js?v=20260716b"></script>
 </body>
 </html>

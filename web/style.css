@@ -5,172 +5,253 @@
 }
 
 :root {
-    --bg: #f1ece1;          /* warm cream, the lookbook sheet */
-    --bg-soft: #e9e3d5;
-    --card: #faf8f2;
-    --text: #1c1a15;
-    --muted: #7d7666;
-    --ink: #1c1a15;         /* buttons, active tab */
-    --accent: #1c1a15;
-    --accent-soft: #e9e3d5;
-    --chip: #eae4d6;
-    --border: #d9d2c2;
+    /* Design tokens from the "Stil Sahnesi" mockup. */
+    --bg: #eef0ee;           /* cool off-white page */
+    --card: #fbfbfa;         /* raised surfaces */
+    --bg-soft: #f4f5f3;
+    --text: #17171d;
+    --muted: #777981;
+    --ink: #17171d;
+    --accent: #6d5dfc;       /* lavender */
+    --accent-soft: #eceaff;
+    --chip: #f4f5f3;
+    --border: #e2e3e5;
     --danger: #b4462e;
     --ok: #4a7a4a;
-    --radius: 0.9rem;
-    --shadow: 0 1px 2px rgba(40, 34, 20, 0.05), 0 10px 28px rgba(40, 34, 20, 0.07);
+    --cream: #f6efe5;        /* warm sheet the garments float on */
+    --radius: 1.3rem;
+    --shadow: 0 18px 52px rgba(20, 22, 30, 0.08), 0 3px 10px rgba(20, 22, 30, 0.035);
     --serif: Georgia, "Times New Roman", serif;
 }
 
 body {
-    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
     background: var(--bg);
     color: var(--text);
     min-height: 100vh;
     display: flex;
     flex-direction: column;
     align-items: center;
-    padding: 1.4rem 1.2rem 2rem;
+    padding: 1.3rem 1.6rem 1.4rem;
+    -webkit-font-smoothing: antialiased;
 }
 
-header {
+/* ---- topbar: brand, centered pill nav, weather + language ---- */
+
+.topbar {
+    position: relative;
     width: 100%;
-    max-width: 76rem;
+    max-width: 86rem;
+    height: 3.4rem;
     display: flex;
-    justify-content: space-between;
     align-items: center;
+    justify-content: space-between;
     margin-bottom: 1.1rem;
+    flex: 0 0 auto;
 }
 
-h1 {
+.brand {
     font-family: var(--serif);
-    font-size: 1.55rem;
-    font-weight: 500;
-    letter-spacing: -0.01em;
-    color: var(--ink);
-}
-
-.lang-switch button {
-    border: 1px solid var(--border);
-    background: transparent;
-    color: var(--muted);
-    padding: 0.35rem 0.75rem;
-    cursor: pointer;
+    font-size: 1.5rem;
     font-weight: 600;
-    font-size: 0.8rem;
-    letter-spacing: 0.06em;
-    transition: all 0.15s;
+    letter-spacing: -0.045em;
+    line-height: 1;
 }
 
-.lang-switch button:first-child {
-    border-right: none;
-}
-
-.lang-switch button.active {
-    background: var(--ink);
-    border-color: var(--ink);
-    color: var(--bg);
-}
-
-/* ---- top-level tabs (Outfit / My wardrobe) ---- */
-
-.tabs {
-    width: 100%;
-    max-width: 76rem;
-    display: flex;
-    gap: 1.4rem;
-    border-bottom: 1px solid var(--border);
-    margin-bottom: 1.3rem;
+.nav-group {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    display: inline-flex;
+    gap: 0.25rem;
+    padding: 0.25rem;
+    border: 1px solid #dfe0e3;
+    border-radius: 0.9rem;
+    background: rgba(255, 255, 255, 0.52);
 }
 
 .tab {
     display: flex;
     align-items: center;
-    gap: 0.45rem;
+    gap: 0.4rem;
     border: none;
     background: transparent;
-    color: var(--muted);
+    color: #767780;
     font-size: 0.82rem;
-    font-weight: 600;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    padding: 0.55rem 0.1rem 0.7rem;
-    border-bottom: 2px solid transparent;
-    margin-bottom: -1px;
+    font-weight: 650;
+    padding: 0.5rem 0.9rem;
+    border-radius: 0.65rem;
     cursor: pointer;
-    transition: color 0.15s, border-color 0.15s;
+    transition: color 0.15s, background 0.15s;
 }
 
 .tab.active {
     color: var(--ink);
-    border-bottom-color: var(--ink);
+    background: #fff;
+    box-shadow: 0 1px 5px rgba(21, 22, 27, 0.07);
 }
 
 .tab .count {
     background: var(--ink);
-    color: var(--bg);
-    font-size: 0.68rem;
+    color: #fff;
+    font-size: 0.66rem;
     font-weight: 700;
     border-radius: 999px;
-    padding: 0.1rem 0.45rem;
+    padding: 0.1rem 0.42rem;
 }
+
+.top-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+}
+
+.weather-pill {
+    height: 2.25rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0 0.8rem;
+    border: 1px solid #dedfe3;
+    border-radius: 0.75rem;
+    background: rgba(255, 255, 255, 0.64);
+    font-size: 0.76rem;
+    font-weight: 650;
+    color: #4e5059;
+}
+
+.lang-switch {
+    display: inline-flex;
+    padding: 0.2rem;
+    border: 1px solid #dedfe3;
+    border-radius: 0.75rem;
+    background: rgba(255, 255, 255, 0.64);
+}
+
+.lang-switch button {
+    border: none;
+    background: transparent;
+    color: var(--muted);
+    padding: 0.3rem 0.6rem;
+    border-radius: 0.55rem;
+    cursor: pointer;
+    font-weight: 650;
+    font-size: 0.74rem;
+    letter-spacing: 0.05em;
+}
+
+.lang-switch button.active {
+    background: var(--ink);
+    color: #fff;
+}
+
+/* ---- shared layout ---- */
 
 main {
     width: 100%;
-    max-width: 34rem;
+    max-width: 86rem;
     display: flex;
     flex-direction: column;
     gap: 1rem;
 }
 
 main.wide {
-    max-width: 76rem;
+    max-width: 86rem;
 }
 
-/* ---- home: controls on the left, the outfit stage on the right ---- */
+/* ---- home: the style stage ---- */
 
-.home-grid {
+.home-shell {
+    flex: 1;
     display: grid;
-    grid-template-columns: minmax(19rem, 24rem) 1fr;
-    gap: 1.4rem;
-    align-items: start;
-}
-
-.home-controls {
-    display: flex;
-    flex-direction: column;
-    gap: 1rem;
-}
-
-.home-stage {
-    position: sticky;
-    top: 1rem;
-    display: flex;
-    flex-direction: column;
-    gap: 1rem;
+    grid-template-columns: minmax(0, 1fr) 22.9rem;
+    gap: 1.25rem;
+    height: calc(100vh - 7.6rem);
     min-height: 34rem;
 }
 
-.stage-card {
-    background: var(--card);
-    border: 1px solid var(--border);
+.stage,
+.sidebar {
+    border: 1px solid rgba(220, 222, 225, 0.94);
     border-radius: var(--radius);
-    padding: 1.4rem 1.6rem;
+    background: var(--card);
     box-shadow: var(--shadow);
+    overflow: hidden;
+    min-height: 0;
+}
+
+.stage {
+    display: grid;
+    grid-template-rows: 4.1rem minmax(0, 1fr) auto;
+}
+
+.stage-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0 1.4rem 0 1.55rem;
+    border-bottom: 1px solid #ededee;
+}
+
+.eyebrow {
+    display: block;
+    margin-bottom: 0.25rem;
+    color: #82848c;
+    font-size: 0.62rem;
+    line-height: 1;
+    font-weight: 800;
+    letter-spacing: 0.145em;
+    text-transform: uppercase;
+}
+
+.stage-name {
+    font-family: var(--serif);
+    font-size: 1.35rem;
+    letter-spacing: -0.02em;
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 34rem;
+}
+
+.stage-weather {
+    font-size: 0.74rem;
+    font-weight: 650;
+    color: #6e707a;
+    text-align: right;
+    flex-shrink: 0;
+    max-width: 22rem;
+}
+
+.tryon-space {
+    position: relative;
+    min-height: 0;
+    overflow: hidden;
+    background:
+        radial-gradient(circle at 16% 23%, rgba(109, 93, 252, 0.075) 0 6px, transparent 6.5px),
+        radial-gradient(circle at 82% 17%, rgba(219, 238, 165, 0.7) 0 9px, transparent 9.5px),
+        radial-gradient(circle at 86% 80%, rgba(243, 225, 200, 0.8) 0 6px, transparent 6.5px),
+        linear-gradient(180deg, #fbfbfa 0%, #f7f7f6 100%);
+}
+
+.stage-empty,
+#stage-board {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .stage-empty {
-    flex: 1;
-    min-height: 34rem;
-    border: 1px dashed var(--border);
-    border-radius: var(--radius);
-    display: flex;
     flex-direction: column;
-    align-items: center;
-    justify-content: center;
     gap: 0.9rem;
     text-align: center;
     padding: 2rem;
+    z-index: 2;
+    background: inherit;
 }
 
 .stage-emoji {
@@ -180,65 +261,312 @@ main.wide {
 
 .stage-hint {
     font-family: var(--serif);
-    font-size: 1.15rem;
+    font-size: 1.1rem;
     font-style: italic;
     color: var(--muted);
     max-width: 24rem;
     line-height: 1.6;
 }
 
-/* The stage has room — let the outfit breathe. */
-.home-stage .look-board {
-    padding: 1.6rem 1rem;
+#stage-board .look-board {
+    background: transparent;
+    border: none;
+    padding: 1rem;
     gap: 0.7rem;
+    max-height: 100%;
 }
 
-.home-stage .look-piece {
-    max-width: 13rem;
-    max-height: 11.5rem;
+#stage-board .look-piece {
+    max-width: 12rem;
+    max-height: 10.5rem;
 }
 
-.home-stage .look-piece.look-bottom,
-.home-stage .look-piece.look-one-piece {
-    max-height: 15rem;
+#stage-board .look-piece.look-bottom,
+#stage-board .look-piece.look-one-piece {
+    max-height: 13.5rem;
 }
 
-.home-stage .look-piece.look-footwear,
-.home-stage .look-piece.look-accessory,
-.home-stage .look-piece.look-jewelry {
-    max-height: 6.5rem;
+#stage-board .look-piece.look-footwear,
+#stage-board .look-piece.look-accessory,
+#stage-board .look-piece.look-jewelry {
+    max-height: 5.5rem;
 }
 
-/* The item rows read as a caption strip under the big board. */
-.home-stage .outfit {
-    flex-direction: row;
-    flex-wrap: wrap;
-    gap: 0.4rem;
+/* Recent looks film strip. */
+.suggestion-tray {
+    border-top: 1px solid #ededef;
+    display: grid;
+    grid-template-columns: 8rem minmax(0, 1fr);
+    gap: 0.8rem;
+    align-items: center;
+    padding: 0.75rem 1.1rem 0.75rem 1.4rem;
+    background: rgba(255, 255, 255, 0.62);
 }
 
-.home-stage .outfit li {
-    padding: 0.35rem 0.7rem;
+.tray-caption {
+    color: #656772;
+    font-size: 0.72rem;
+    font-weight: 760;
+    line-height: 1.35;
+}
+
+.tray-caption .tray-sub {
+    display: block;
+    color: #a0a1a8;
+    font-size: 0.64rem;
+    font-weight: 600;
+    margin-top: 0.2rem;
+}
+
+.looks {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 0.5rem;
-    font-size: 0.85rem;
 }
 
-.home-stage .outfit .thumb {
-    width: 2rem;
-    height: 2rem;
+.look-card {
+    height: 4.3rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.35rem;
+    border: 1px solid #e9e9ec;
+    background: #fff;
+    border-radius: 0.7rem;
+    color: #777982;
+    overflow: hidden;
+    cursor: pointer;
+    text-align: left;
+    transition: border-color 0.15s, box-shadow 0.15s;
 }
 
-@media (max-width: 56rem) {
-    .home-grid {
-        grid-template-columns: 1fr;
-    }
-    .home-stage {
-        position: static;
-        min-height: 0;
-    }
-    .stage-empty {
-        min-height: 12rem;
-    }
+.look-card:hover {
+    border-color: #a79eff;
+    box-shadow: inset 0 0 0 1px rgba(109, 93, 252, 0.08);
 }
+
+.look-thumb {
+    width: 2.7rem;
+    height: 3.5rem;
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    border-radius: 0.45rem;
+    background: var(--cream);
+}
+
+.look-thumb img {
+    flex: 1;
+    min-height: 0;
+    max-width: 90%;
+    object-fit: contain;
+}
+
+.look-copy {
+    min-width: 0;
+    font-size: 0.66rem;
+    font-weight: 750;
+    line-height: 1.25;
+    color: #4d4e57;
+}
+
+.look-copy strong,
+.look-copy span {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.look-copy span {
+    color: #9d9ea5;
+    font-size: 0.6rem;
+    font-weight: 600;
+    margin-top: 0.2rem;
+}
+
+/* ---- sidebar: the decision panel ---- */
+
+.sidebar {
+    display: grid;
+    grid-template-rows: auto auto minmax(0, 1fr) auto;
+}
+
+.side-section {
+    padding: 1.15rem 1.25rem;
+    border-bottom: 1px solid #ececef;
+}
+
+.section-title {
+    margin: 0 0 0.65rem;
+    font-size: 0.82rem;
+    font-weight: 780;
+    letter-spacing: -0.01em;
+}
+
+.prompt-box {
+    width: 100%;
+    min-height: 3.8rem;
+    padding: 0.7rem 0.75rem;
+    resize: none;
+    outline: none;
+    border: 1px solid #dedfe3;
+    border-radius: 0.8rem;
+    background: #fff;
+    color: #3c3e47;
+    font: inherit;
+    font-size: 0.8rem;
+    line-height: 1.4;
+}
+
+.prompt-box:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.context-row {
+    display: flex;
+    gap: 0.35rem;
+    flex-wrap: wrap;
+    margin-top: 0.6rem;
+}
+
+.context-row .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.4rem 0.55rem;
+    border: 1px solid #e4e4e7;
+    border-radius: 0.55rem;
+    background: #fafafa;
+    color: #646670;
+    font-size: 0.66rem;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.small-link {
+    display: inline-block;
+    margin-top: 0.55rem;
+    border: none;
+    background: transparent;
+    color: var(--accent);
+    padding: 0;
+    font-size: 0.68rem;
+    font-weight: 780;
+    cursor: pointer;
+}
+
+.context-editor {
+    margin-top: 0.8rem;
+    padding-top: 0.8rem;
+    border-top: 1px dashed var(--border);
+    display: flex;
+    flex-direction: column;
+    gap: 0.55rem;
+    max-height: 18rem;
+    overflow-y: auto;
+}
+
+.editor-label {
+    font-size: 0.7rem;
+    font-weight: 700;
+    color: var(--muted);
+}
+
+.context-editor textarea {
+    width: 100%;
+    resize: vertical;
+    font-size: 0.8rem;
+}
+
+.stylist-note {
+    margin: 0;
+    color: #63656f;
+    font-size: 0.8rem;
+    line-height: 1.55;
+    font-family: var(--serif);
+    font-style: italic;
+}
+
+.stylist-note:empty {
+    display: none;
+}
+
+.items-area {
+    padding: 1rem 1.25rem;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+}
+
+.items-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 0.6rem;
+}
+
+.items-heading .section-title {
+    margin: 0;
+}
+
+.item-count {
+    color: #a1a2aa;
+    font-size: 0.64rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+}
+
+.side-actions {
+    display: grid;
+    grid-template-columns: 1fr 2.8rem;
+    gap: 0.5rem;
+    padding: 1rem 1.25rem 1.2rem;
+    border-top: 1px solid #ececef;
+}
+
+.primary {
+    border: none;
+    border-radius: 0.8rem;
+    background: var(--ink);
+    color: #fff;
+    font: inherit;
+    font-size: 0.84rem;
+    font-weight: 760;
+    padding: 0.8rem;
+    cursor: pointer;
+    box-shadow: 0 5px 14px rgba(25, 25, 31, 0.16);
+    transition: opacity 0.12s;
+}
+
+.primary:hover {
+    opacity: 0.92;
+}
+
+.primary:disabled {
+    opacity: 0.6;
+    cursor: wait;
+}
+
+.round-action {
+    border: 1px solid #dedfe3;
+    border-radius: 0.8rem;
+    color: #565861;
+    background: #fff;
+    font-size: 1.05rem;
+    cursor: pointer;
+}
+
+.round-action:hover {
+    border-color: var(--ink);
+}
+
+/* ---- shared bits ---- */
 
 .card {
     background: var(--card);
@@ -248,32 +576,20 @@ main.wide {
     box-shadow: var(--shadow);
 }
 
-.card h2,
-.add-block h2 {
-    font-size: 0.8rem;
-    font-weight: 700;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    color: var(--muted);
-    margin-bottom: 0.75rem;
-}
-
-/* ---- chips ---- */
-
 .chips {
     display: flex;
     flex-wrap: wrap;
-    gap: 0.5rem;
+    gap: 0.45rem;
 }
 
 .chips button {
     border: 1px solid var(--border);
-    background: transparent;
+    background: #fff;
     color: var(--text);
-    padding: 0.42rem 0.9rem;
+    padding: 0.4rem 0.8rem;
     border-radius: 999px;
     cursor: pointer;
-    font-size: 0.9rem;
+    font-size: 0.82rem;
     transition: all 0.15s;
 }
 
@@ -284,44 +600,18 @@ main.wide {
 .chips button.selected {
     background: var(--ink);
     border-color: var(--ink);
-    color: var(--bg);
-}
-
-/* ---- buttons ---- */
-
-#recommend-btn {
-    border: none;
-    background: var(--ink);
-    color: var(--bg);
-    font-size: 1.02rem;
-    font-weight: 600;
-    letter-spacing: 0.04em;
-    padding: 0.95rem;
-    border-radius: var(--radius);
-    cursor: pointer;
-    transition: opacity 0.12s, transform 0.12s;
-}
-
-#recommend-btn:hover {
-    opacity: 0.92;
-    transform: translateY(-1px);
-}
-
-#recommend-btn:disabled {
-    opacity: 0.6;
-    cursor: wait;
-    transform: none;
+    color: #fff;
 }
 
 .btn {
     display: inline-block;
     border: 1px solid var(--ink);
     background: var(--ink);
-    color: var(--bg);
+    color: #fff;
     font-weight: 600;
-    font-size: 0.92rem;
-    padding: 0.6rem 1.1rem;
-    border-radius: 0.65rem;
+    font-size: 0.88rem;
+    padding: 0.6rem 1.05rem;
+    border-radius: 0.7rem;
     cursor: pointer;
     transition: opacity 0.15s;
     text-align: center;
@@ -338,19 +628,18 @@ main.wide {
 
 .ghost-btn {
     border: 1px solid var(--border);
-    background: transparent;
+    background: #fff;
     color: var(--text);
     font-weight: 600;
-    font-size: 0.85rem;
-    padding: 0.5rem 0.95rem;
-    border-radius: 0.65rem;
+    font-size: 0.82rem;
+    padding: 0.5rem 0.9rem;
+    border-radius: 0.7rem;
     cursor: pointer;
-    transition: border-color 0.15s, background 0.15s;
+    transition: border-color 0.15s;
 }
 
 .ghost-btn:hover {
     border-color: var(--ink);
-    background: rgba(255, 255, 255, 0.5);
 }
 
 .ghost-btn:disabled {
@@ -363,14 +652,12 @@ main.wide {
     background: transparent;
     color: var(--text);
     cursor: pointer;
-    font-size: 0.9rem;
+    font-size: 0.85rem;
     font-weight: 600;
     padding: 0.2rem 0;
     text-decoration: underline;
     text-underline-offset: 3px;
 }
-
-/* ---- inputs ---- */
 
 textarea,
 input[type="text"],
@@ -378,10 +665,10 @@ input[type="number"],
 select {
     padding: 0.55rem 0.7rem;
     border: 1px solid var(--border);
-    border-radius: 0.55rem;
+    border-radius: 0.6rem;
     font: inherit;
-    font-size: 0.95rem;
-    background: #fffdf8;
+    font-size: 0.9rem;
+    background: #fff;
     color: var(--text);
     transition: border-color 0.15s, box-shadow 0.15s;
 }
@@ -390,98 +677,27 @@ textarea:focus,
 input:focus,
 select:focus {
     outline: none;
-    border-color: var(--ink);
-    box-shadow: 0 0 0 3px rgba(28, 26, 21, 0.08);
-}
-
-#ask-section textarea,
-#mood-section textarea,
-#location-editor input {
-    width: 100%;
-    resize: vertical;
-    margin-bottom: 0.6rem;
-}
-
-/* ---- outfit result ---- */
-
-.outfit {
-    list-style: none;
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-}
-
-.outfit li {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    background: rgba(255, 255, 255, 0.55);
-    border: 1px solid var(--border);
-    border-radius: 0.7rem;
-    padding: 0.6rem 0.9rem;
-}
-
-.outfit .emoji {
-    font-size: 1.5rem;
-}
-
-.outfit .category,
-.category {
-    color: var(--muted);
-    font-size: 0.74rem;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    display: block;
-}
-
-.thumb {
-    width: 2.8rem;
-    height: 2.8rem;
-    object-fit: cover;
-    border-radius: 0.5rem;
-    display: block;
-}
-
-.thumb-cutout {
-    object-fit: contain;
-    background: transparent;
-}
-
-.reason {
-    margin-top: 0.9rem;
-    padding: 0.7rem 0.9rem;
-    border-left: 2px solid var(--ink);
-    font-family: var(--serif);
-    font-size: 0.95rem;
-    font-style: italic;
-    line-height: 1.5;
-}
-
-#ask-result {
-    margin-top: 0.9rem;
-}
-
-#ask-explanation:empty {
-    display: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
 .error {
     color: var(--danger);
-    text-align: center;
+    font-size: 0.85rem;
+    margin-top: 0.6rem;
 }
 
 .note {
-    font-size: 0.85rem;
+    font-size: 0.78rem;
     color: var(--muted);
-    margin-bottom: 0.5rem;
+    margin-bottom: 0.4rem;
 }
 
 .toggle {
     display: flex;
     align-items: center;
     gap: 0.5rem;
-    margin-top: 0.9rem;
-    font-size: 0.93rem;
+    font-size: 0.82rem;
     cursor: pointer;
 }
 
@@ -489,18 +705,11 @@ select:focus {
     accent-color: var(--ink);
 }
 
-/* ---- weather & profile card ---- */
-
 .weather-row {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    font-size: 0.93rem;
-    margin-bottom: 0.5rem;
-}
-
-#city-results {
-    margin-bottom: 0.5rem;
+    font-size: 0.82rem;
 }
 
 .hours-row {
@@ -508,22 +717,26 @@ select:focus {
     justify-content: space-between;
     align-items: center;
     gap: 0.5rem;
-    font-size: 0.93rem;
-    margin-top: 0.75rem;
+    font-size: 0.82rem;
 }
 
 .hours-selects {
     display: flex;
     align-items: center;
-    gap: 0.35rem;
+    gap: 0.3rem;
+}
+
+.hours-selects select,
+.hours-row select {
+    font-size: 0.8rem;
+    padding: 0.35rem 0.45rem;
 }
 
 #manual-weather-fields {
     display: flex;
     align-items: center;
-    gap: 1rem;
-    margin-top: 0.6rem;
-    font-size: 0.9rem;
+    gap: 0.8rem;
+    font-size: 0.8rem;
     color: var(--muted);
 }
 
@@ -534,7 +747,7 @@ select:focus {
 #manual-weather-fields label {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
+    gap: 0.4rem;
 }
 
 #manual-weather-fields .toggle {
@@ -542,7 +755,75 @@ select:focus {
 }
 
 #manual-weather-fields input[type="number"] {
-    width: 5.5rem;
+    width: 4.6rem;
+    font-size: 0.8rem;
+    padding: 0.35rem 0.45rem;
+}
+
+/* ---- outfit piece list (sidebar + panels) ---- */
+
+.outfit {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
+}
+
+.outfit li {
+    display: grid;
+    grid-template-columns: 2.6rem minmax(0, 1fr);
+    align-items: center;
+    gap: 0.55rem;
+    background: #f8f8f8;
+    border: 1px solid #eeeeef;
+    border-radius: 0.7rem;
+    padding: 0.4rem;
+}
+
+.outfit .emoji {
+    font-size: 1.3rem;
+    text-align: center;
+}
+
+.outfit .category,
+.category {
+    color: var(--muted);
+    font-size: 0.6rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    display: block;
+}
+
+.outfit li > span:last-child {
+    min-width: 0;
+    font-size: 0.78rem;
+    font-weight: 650;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.thumb {
+    width: 2.6rem;
+    height: 2.6rem;
+    object-fit: cover;
+    border-radius: 0.5rem;
+    display: block;
+}
+
+.thumb-cutout {
+    object-fit: contain;
+    background: var(--cream);
+}
+
+.reason {
+    margin-top: 0.9rem;
+    padding: 0.7rem 0.9rem;
+    border-left: 2px solid var(--ink);
+    font-family: var(--serif);
+    font-size: 0.95rem;
+    font-style: italic;
+    line-height: 1.5;
 }
 
 /* ---- feedback ---- */
@@ -565,7 +846,7 @@ select:focus {
     border: none;
     background: transparent;
     color: var(--ink);
-    font-size: 1.55rem;
+    font-size: 1.35rem;
     line-height: 1;
     cursor: pointer;
     padding: 0.1rem;
@@ -581,8 +862,8 @@ select:focus {
 }
 
 .feedback-tags button {
-    font-size: 0.82rem;
-    padding: 0.32rem 0.7rem;
+    font-size: 0.72rem;
+    padding: 0.3rem 0.6rem;
 }
 
 .feedback-detail {
@@ -594,6 +875,7 @@ select:focus {
 .feedback-detail textarea {
     flex: 1;
     resize: vertical;
+    font-size: 0.8rem;
 }
 
 .feedback-detail.hidden {
@@ -603,16 +885,21 @@ select:focus {
 .send-feedback {
     border: none;
     background: var(--ink);
-    color: var(--bg);
+    color: #fff;
     font-weight: 600;
-    padding: 0.55rem 1rem;
-    border-radius: 0.55rem;
+    padding: 0.55rem 0.9rem;
+    border-radius: 0.6rem;
     cursor: pointer;
+    font-size: 0.8rem;
 }
 
 .send-feedback:disabled {
     opacity: 0.6;
     cursor: wait;
+}
+
+.worn-btn {
+    margin-bottom: 0.6rem;
 }
 
 /* ---- wardrobe lookbook ---- */
@@ -625,8 +912,8 @@ select:focus {
 }
 
 .lookbook-count {
-    font-size: 0.82rem;
-    font-weight: 600;
+    font-size: 0.8rem;
+    font-weight: 650;
     letter-spacing: 0.14em;
     text-transform: uppercase;
     color: var(--text);
@@ -654,8 +941,8 @@ select:focus {
     justify-content: space-between;
     align-items: center;
     gap: 0.75rem;
-    font-size: 0.87rem;
-    background: rgba(255, 255, 255, 0.55);
+    font-size: 0.85rem;
+    background: #fff;
     border-radius: 0.5rem;
     padding: 0.45rem 0.7rem;
 }
@@ -691,7 +978,6 @@ select:focus {
     background: var(--chip);
 }
 
-/* Category filter tabs, boxed uppercase, dark when active. */
 .filter-tabs {
     display: flex;
     flex-wrap: wrap;
@@ -702,24 +988,24 @@ select:focus {
     border: 1px solid var(--border);
     background: transparent;
     color: var(--text);
-    font-size: 0.74rem;
+    font-size: 0.72rem;
     font-weight: 600;
     letter-spacing: 0.12em;
     text-transform: uppercase;
     padding: 0.6rem 1.05rem;
-    margin: 0 -1px -1px 0;   /* collapse doubled borders between tabs */
+    margin: 0 -1px -1px 0;
     cursor: pointer;
     transition: background 0.15s;
 }
 
 .filter-tabs button:hover {
-    background: rgba(255, 255, 255, 0.55);
+    background: rgba(255, 255, 255, 0.7);
 }
 
 .filter-tabs button.active {
     background: var(--ink);
     border-color: var(--ink);
-    color: var(--bg);
+    color: #fff;
 }
 
 .filter-tabs .outfits-tab {
@@ -735,8 +1021,6 @@ select:focus {
     display: none;
 }
 
-/* ---- add panel (bulk + single form) ---- */
-
 .add-panel {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -748,20 +1032,30 @@ select:focus {
     box-shadow: var(--shadow);
 }
 
+.add-block h2 {
+    font-size: 0.8rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 0.75rem;
+}
+
 @media (max-width: 44rem) {
     .add-panel {
         grid-template-columns: 1fr;
     }
 }
 
-/* ---- the gallery: garments floating on the cream page ---- */
-
+/* The gallery: garments floating on a warm sheet. */
 .gallery-grid {
     list-style: none;
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(10.5rem, 1fr));
     gap: 2.2rem 1.6rem;
-    padding: 1.6rem 0.4rem;
+    background: var(--cream);
+    border-radius: var(--radius);
+    padding: 1.8rem 1.4rem;
 }
 
 .gallery-grid:empty {
@@ -771,13 +1065,6 @@ select:focus {
 .gallery-grid li {
     position: relative;
     cursor: pointer;
-    padding: 0.5rem;
-    border: 1px solid transparent;
-}
-
-/* Like the reference: a thin frame appears around the hovered piece. */
-.gallery-grid li:hover {
-    border-color: var(--muted);
 }
 
 .card-visual {
@@ -800,7 +1087,6 @@ select:focus {
     display: block;
 }
 
-/* Plain photos (no cutout yet) get a soft tile so they don't look broken. */
 .card-visual.photo img {
     width: 100%;
     height: 100%;
@@ -816,7 +1102,6 @@ select:focus {
     font-size: 2.6rem;
 }
 
-/* Laundry: dirty pieces fade back and carry a basket badge. */
 .card-visual.dirty img {
     opacity: 0.35;
     filter: grayscale(0.6);
@@ -827,10 +1112,6 @@ select:focus {
     top: 0.3rem;
     left: 0.3rem;
     font-size: 1.1rem;
-}
-
-.worn-btn {
-    margin-bottom: 0.6rem;
 }
 
 .card-name {
@@ -853,10 +1134,11 @@ select:focus {
     opacity: 1;
 }
 
-.gallery-grid .delete-btn {
+.gallery-grid .delete-btn,
+.look-tile .delete-btn {
     position: absolute;
-    top: 0;
-    right: 0;
+    top: 0.35rem;
+    right: 0.35rem;
     background: rgba(255, 255, 255, 0.92);
     border: 1px solid var(--border);
     border-radius: 999px;
@@ -870,7 +1152,8 @@ select:focus {
     transition: opacity 0.15s;
 }
 
-.gallery-grid li:hover .delete-btn {
+.gallery-grid li:hover .delete-btn,
+.look-tile:hover .delete-btn {
     opacity: 1;
 }
 
@@ -890,36 +1173,15 @@ select:focus {
 
 .look-tile {
     position: relative;
-    background: rgba(255, 255, 255, 0.5);
+    background: #fff;
     border: 1px solid var(--border);
-    border-radius: 0.4rem;
+    border-radius: 0.9rem;
     padding: 1rem 1rem 0.8rem;
     cursor: pointer;
     display: flex;
     flex-direction: column;
     gap: 0.6rem;
     transition: transform 0.15s ease, box-shadow 0.15s;
-}
-
-.look-tile .delete-btn {
-    position: absolute;
-    top: 0.45rem;
-    right: 0.45rem;
-    background: rgba(255, 255, 255, 0.92);
-    border: 1px solid var(--border);
-    border-radius: 999px;
-    width: 1.6rem;
-    height: 1.6rem;
-    line-height: 1;
-    color: var(--muted);
-    font-size: 0.85rem;
-    cursor: pointer;
-    opacity: 0;
-    transition: opacity 0.15s;
-}
-
-.look-tile:hover .delete-btn {
-    opacity: 1;
 }
 
 .look-tile:hover {
@@ -934,6 +1196,9 @@ select:focus {
     justify-content: center;
     flex-wrap: wrap;
     gap: 0.4rem;
+    background: var(--cream);
+    border-radius: 0.6rem;
+    padding: 0.5rem;
 }
 
 .look-tile-visual img {
@@ -949,10 +1214,13 @@ select:focus {
 
 .look-tile-label {
     font-size: 0.72rem;
-    font-weight: 600;
-    letter-spacing: 0.14em;
+    font-weight: 650;
+    letter-spacing: 0.12em;
     text-transform: uppercase;
-    color: var(--muted);
+    color: #55565f;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 /* ---- detail slide-in panel ---- */
@@ -960,7 +1228,7 @@ select:focus {
 .panel-backdrop {
     position: fixed;
     inset: 0;
-    background: rgba(28, 26, 21, 0.25);
+    background: rgba(23, 23, 29, 0.28);
     z-index: 40;
 }
 
@@ -970,8 +1238,8 @@ select:focus {
     right: 0;
     height: 100vh;
     width: min(27rem, 94vw);
-    background: #f6f2e8;
-    box-shadow: -14px 0 40px rgba(40, 34, 20, 0.18);
+    background: var(--card);
+    box-shadow: -14px 0 40px rgba(20, 22, 30, 0.18);
     z-index: 50;
     overflow-y: auto;
     padding: 1.1rem 1.4rem 2rem;
@@ -992,16 +1260,16 @@ select:focus {
 
 .panel-kicker {
     display: inline-block;
-    background: #fffdf8;
+    background: #fff;
     border: 1px solid var(--border);
     padding: 0.45rem 0.9rem;
-    font-size: 0.74rem;
-    font-weight: 600;
+    border-radius: 0.55rem;
+    font-size: 0.72rem;
+    font-weight: 650;
     letter-spacing: 0.14em;
     text-transform: uppercase;
 }
 
-/* The look panel's kicker is plain text, like "LOOK 23" in the reference. */
 .panel-kicker.plain {
     background: transparent;
     border: none;
@@ -1029,6 +1297,8 @@ select:focus {
     min-height: 13rem;
     max-height: 17rem;
     margin-bottom: 1.2rem;
+    background: var(--cream);
+    border-radius: 0.9rem;
 }
 
 .panel-hero img {
@@ -1048,8 +1318,8 @@ select:focus {
 
 .panel-label {
     display: block;
-    font-size: 0.7rem;
-    font-weight: 600;
+    font-size: 0.66rem;
+    font-weight: 650;
     letter-spacing: 0.14em;
     text-transform: uppercase;
     color: var(--muted);
@@ -1070,9 +1340,9 @@ select:focus {
 .panel-static {
     padding: 0.55rem 0.7rem;
     border: 1px solid var(--border);
-    border-radius: 0.55rem;
-    background: #fffdf8;
-    font-size: 0.95rem;
+    border-radius: 0.6rem;
+    background: #fff;
+    font-size: 0.9rem;
 }
 
 .swatch-row {
@@ -1084,8 +1354,8 @@ select:focus {
 .swatch {
     width: 2.4rem;
     height: 2.4rem;
-    border-radius: 0.3rem;
-    border: 1px solid rgba(40, 34, 20, 0.15);
+    border-radius: 0.4rem;
+    border: 1px solid rgba(23, 23, 29, 0.12);
     flex-shrink: 0;
 }
 
@@ -1101,7 +1371,7 @@ select:focus {
 }
 
 .swatch-caption {
-    font-size: 0.74rem;
+    font-size: 0.72rem;
     color: var(--muted);
 }
 
@@ -1113,24 +1383,25 @@ select:focus {
 
 .detail-tags span {
     border: 1px solid var(--border);
-    background: #fffdf8;
-    padding: 0.35rem 0.75rem;
-    font-size: 0.74rem;
-    font-weight: 600;
+    background: #fff;
+    padding: 0.35rem 0.7rem;
+    border-radius: 0.5rem;
+    font-size: 0.68rem;
+    font-weight: 650;
     letter-spacing: 0.1em;
     text-transform: uppercase;
 }
 
 .panel-title {
     font-family: var(--serif);
-    font-size: 1.5rem;
+    font-size: 1.45rem;
     font-weight: 500;
     letter-spacing: -0.01em;
     margin: 0.4rem 0 0.5rem;
 }
 
 .panel-text {
-    font-size: 0.93rem;
+    font-size: 0.9rem;
     line-height: 1.55;
     color: var(--text);
 }
@@ -1141,22 +1412,22 @@ select:focus {
     padding-top: 0.9rem;
 }
 
-/* ---- the look board: an outfit composed from cutouts ---- */
+/* ---- the look board ---- */
 
 .look-board {
     display: flex;
     flex-direction: column;
     align-items: center;
     gap: 0.4rem;
-    background: rgba(255, 255, 255, 0.45);
+    background: var(--cream);
     border: 1px solid var(--border);
-    border-radius: 0.6rem;
+    border-radius: 0.9rem;
     padding: 1.1rem 0.9rem;
     margin-bottom: 0.75rem;
 }
 
 .detail-panel .look-board {
-    background: transparent;
+    background: var(--cream);
     border: none;
 }
 
@@ -1183,29 +1454,6 @@ select:focus {
 .look-piece.look-accessory,
 .look-piece.look-jewelry {
     max-height: 5.5rem;
-}
-
-/* Floating add button, bottom-left like the reference. */
-.fab {
-    position: fixed;
-    left: 1.4rem;
-    bottom: 1.4rem;
-    width: 3rem;
-    height: 3rem;
-    border-radius: 999px;
-    border: none;
-    background: var(--ink);
-    color: var(--bg);
-    font-size: 1.5rem;
-    line-height: 1;
-    cursor: pointer;
-    box-shadow: 0 6px 18px rgba(40, 34, 20, 0.25);
-    z-index: 30;
-    transition: transform 0.12s;
-}
-
-.fab:hover {
-    transform: scale(1.06);
 }
 
 /* ---- the outfit builder ---- */
@@ -1235,7 +1483,7 @@ select:focus {
     aspect-ratio: 1;
     border: 1px solid transparent;
     border-radius: 0.5rem;
-    background: rgba(255, 255, 255, 0.5);
+    background: var(--bg-soft);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1256,8 +1504,31 @@ select:focus {
 }
 
 .builder-cell.selected {
-    border-color: var(--ink);
-    background: #fffdf8;
+    border-color: var(--accent);
+    background: var(--accent-soft);
+}
+
+/* Floating add button, bottom-left. */
+.fab {
+    position: fixed;
+    left: 1.4rem;
+    bottom: 1.4rem;
+    width: 3rem;
+    height: 3rem;
+    border-radius: 999px;
+    border: none;
+    background: var(--ink);
+    color: #fff;
+    font-size: 1.5rem;
+    line-height: 1;
+    cursor: pointer;
+    box-shadow: 0 6px 18px rgba(20, 22, 30, 0.25);
+    z-index: 30;
+    transition: transform 0.12s;
+}
+
+.fab:hover {
+    transform: scale(1.06);
 }
 
 /* ---- add form ---- */
@@ -1273,7 +1544,7 @@ select:focus {
     display: flex;
     flex-direction: column;
     gap: 0.25rem;
-    font-size: 0.88rem;
+    font-size: 0.85rem;
     color: var(--muted);
 }
 
@@ -1283,7 +1554,6 @@ select:focus {
     gap: 0.75rem;
 }
 
-/* The multi-select color chips need the full row in the attribute grid. */
 #attribute-selects label:has(.attr-chips) {
     grid-column: 1 / -1;
 }
@@ -1294,7 +1564,61 @@ select:focus {
 
 footer {
     margin-top: auto;
-    padding-top: 2rem;
-    font-size: 0.75rem;
+    padding-top: 1.2rem;
+    font-size: 0.72rem;
     color: var(--muted);
+}
+
+/* ---- responsive ---- */
+
+@media (max-width: 64rem) {
+    .home-shell {
+        grid-template-columns: 1fr;
+        height: auto;
+    }
+    .stage {
+        min-height: 30rem;
+    }
+    .tryon-space {
+        min-height: 22rem;
+    }
+    .nav-group {
+        position: static;
+        transform: none;
+    }
+    .topbar {
+        flex-wrap: wrap;
+        height: auto;
+        gap: 0.6rem;
+    }
+    .looks {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-height: 51rem) {
+    body {
+        padding-top: 0.8rem;
+    }
+    .topbar {
+        margin-bottom: 0.7rem;
+    }
+    #stage-board .look-piece {
+        max-height: 8.5rem;
+    }
+    #stage-board .look-piece.look-bottom,
+    #stage-board .look-piece.look-one-piece {
+        max-height: 11rem;
+    }
+    #stage-board .look-piece.look-footwear,
+    #stage-board .look-piece.look-accessory,
+    #stage-board .look-piece.look-jewelry {
+        max-height: 4.5rem;
+    }
+    .side-section {
+        padding: 0.85rem 1.25rem;
+    }
+    .look-card {
+        height: 3.6rem;
+    }
 }

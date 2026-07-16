@@ -181,11 +181,15 @@ std::string buildStylistPrompt(const std::string& context,
               "families; avoid clashing saturated colors together.\n"
            << "- At most one boldly patterned piece per outfit.\n"
            << "Reply with ONLY a JSON object, no markdown, matching exactly:\n"
-           << "{\"picks\": {\"<category>\": <number>, ...}, \"reason\": <string>}\n"
+           << "{\"picks\": {\"<category>\": <number>, ...}, \"reason\": <string>, "
+              "\"title\": <string>}\n"
            << "\"reason\" is ONE warm, natural sentence (max 25 words) in the "
               "language with BCP 47 code '" << lang
            << "' telling the user why this combination works for the weather "
-              "and their situation.";
+              "and their situation.\n"
+           << "\"title\" is a short editorial name for the look (2-4 words, "
+              "no quotes around garments, e.g. 'Quiet city evening'), in the "
+              "same language.";
     return prompt.str();
 }
 
@@ -352,6 +356,9 @@ StyledOutfit parseStylistPicksJson(const std::string& text,
     styled.items = std::move(outfit);
     if (j.contains("reason") && j["reason"].is_string()) {
         styled.reason = j["reason"];
+    }
+    if (j.contains("title") && j["title"].is_string()) {
+        styled.title = j["title"];
     }
     return styled;
 }

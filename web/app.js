@@ -39,10 +39,18 @@ const STRINGS = {
         gender_female: "women",
         use_wardrobe: "Recommend from my wardrobe",
         catalog_fallback: "Your wardrobe is empty, so this comes from the general catalog.",
-        ask_title: "Tell me your plan",
+        ask_title: "Where are you heading?",
         ask_placeholder: "e.g. going to work tomorrow, smart but comfy",
         ask: "Suggest an outfit",
         asking: "Thinking...",
+        stage_eyebrow: "Today's outfit",
+        why_title: "Why it works",
+        pieces_title: "Chosen pieces",
+        piece_count: (n) => `${n} PIECE${n === 1 ? "" : "S"}`,
+        recent_title: "Recent looks",
+        recent_hint: "Tap one to bring it back",
+        edit_context: "Adjust details ▾",
+        fallback_title: "Today's pick",
         ask_no_key: "The Gemini API key is not set up yet (see .env).",
         wardrobe_title: "My wardrobe",
         wardrobe_empty: "No items yet — add your first piece below!",
@@ -161,10 +169,18 @@ const STRINGS = {
         gender_female: "kadın",
         use_wardrobe: "Gardırobumdan öner",
         catalog_fallback: "Gardırobun boş olduğu için bu öneri genel katalogdan geldi.",
-        ask_title: "Planını anlat",
+        ask_title: "Nereye gidiyorsun?",
         ask_placeholder: "örn. yarın işe gideceğim, şık ama rahat olsun",
         ask: "Kombin öner",
         asking: "Düşünüyorum...",
+        stage_eyebrow: "Bugünün kombini",
+        why_title: "Neden çalışıyor?",
+        pieces_title: "Seçilen parçalar",
+        piece_count: (n) => `${n} PARÇA`,
+        recent_title: "Son kombinler",
+        recent_hint: "Geri getirmek için dokun",
+        edit_context: "Ayrıntıları düzenle ▾",
+        fallback_title: "Bugünün önerisi",
         ask_no_key: "Gemini API anahtarı henüz ayarlanmamış (.env dosyasına bak).",
         wardrobe_title: "Gardırobum",
         wardrobe_empty: "Henüz kıyafet yok — aşağıdan ilk parçanı ekle!",
@@ -297,6 +313,12 @@ function renderLocationName() {
     $("location-name").textContent =
         savedLocation ? savedLocation.city
                       : detectedCity || t("location_unknown");
+    const city = savedLocation ? savedLocation.city : detectedCity;
+    if (city && $("top-weather").classList.contains("hidden")) {
+        $("top-weather").textContent = `📍 ${city}`;
+        $("top-weather").classList.remove("hidden");
+    }
+    renderContextChips();
 }
 
 async function loadLocation() {
@@ -428,10 +450,6 @@ function buildLookBoard(items) {
 
 function renderOutfitList(listEl, items) {
     listEl.innerHTML = "";
-    const previousBoard = listEl.parentElement.querySelector(".look-board");
-    if (previousBoard) previousBoard.remove();
-    const board = buildLookBoard(items);
-    if (board) listEl.parentElement.insertBefore(board, listEl);
     for (const item of items) {
         const li = document.createElement("li");
         const visual = document.createElement("span");
@@ -461,6 +479,127 @@ async function fetchJson(url, options) {
     const res = await fetch(url, options);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return res.json();
+}
+
+// ---- the stage: one render path for every outfit source ----
+
+function renderStageBoard(items) {
+    const host = $("stage-board");
+    host.innerHTML = "";
+    const board = buildLookBoard(items);
+    if (board) host.appendChild(board);
+}
+
+// Fills the whole home screen from one response: title and weather in the
+// stage header, the big board in the middle, reason + pieces + feedback in
+// the sidebar.
+function renderStage(data) {
+    $("stage-empty").classList.add("hidden");
+    $("outfit-title").textContent = data.title || t("fallback_title");
+    $("weather-line").textContent = data.weather ? t("weather")(data.weather) : "";
+    renderStageBoard(data.outfit);
+    renderOutfitList($("outfit-list"), data.outfit);
+    $("item-count").textContent = t("piece_count")(data.outfit.length);
+    $("explanation").textContent = data.explanation || "";
+    $("why-section").classList.toggle(
+        "hidden", !data.explanation && !data.moods && data.source !== "catalog");
+    renderFeedback("feedback-box", data.recommendation_id, "outfit-list");
+    if (data.weather) {
+        const w = data.weather;
+        $("top-weather").textContent =
+            `${w.city ? w.city + " · " : ""}${Math.round(w.temperature_c)}°` +
+            `${w.is_raining ? " 🌧" : " ☀"}`;
+        $("top-weather").classList.remove("hidden");
+    }
+    savedOutfits = null;  // the look was saved; refresh the tray + OUTFITS tab
+    renderRecentLooks();
+}
+
+// The film strip under the stage: the last few saved looks, tappable.
+async function renderRecentLooks() {
+    if (savedOutfits === null) {
+        try {
+            savedOutfits = (await fetchJson(`/api/outfits?lang=${lang}`)).outfits;
+        } catch (err) {
+            console.error(err);
+            return;
+        }
+    }
+    const tray = $("recent-tray");
+    const host = $("recent-looks");
+    host.innerHTML = "";
+    const recent = savedOutfits
+        .filter((o) => o.items.some((i) => i.cutout_url || i.photo_url))
+        .slice(0, 4);
+    tray.classList.toggle("hidden", recent.length === 0);
+    for (const outfit of recent) {
+        const card = document.createElement("button");
+        card.type = "button";
+        card.className = "look-card";
+        const thumb = document.createElement("span");
+        thumb.className = "look-thumb";
+        for (const item of outfit.items.filter((i) => i.cutout_url || i.photo_url)
+                                       .slice(0, 2)) {
+            const img = document.createElement("img");
+            img.src = item.cutout_url || item.photo_url;
+            img.alt = item.item_name;
+            img.loading = "lazy";
+            thumb.appendChild(img);
+        }
+        const copy = document.createElement("span");
+        copy.className = "look-copy";
+        copy.innerHTML = "";
+        const line1 = document.createElement("strong");
+        line1.textContent = outfit.title || `${t("look_word")} ${outfit.id}`;
+        const line2 = document.createElement("span");
+        line2.textContent = outfit.items.map((i) => i.item_name).slice(0, 2).join(" · ");
+        copy.append(line1, line2);
+        card.append(thumb, copy);
+        card.addEventListener("click", () => {
+            renderStage({
+                title: outfit.title,
+                outfit: outfit.items.map((i) => ({ ...i, score: 0 })),
+                explanation: outfit.explanation,
+                recommendation_id: outfit.id,
+            });
+        });
+        host.appendChild(card);
+    }
+}
+
+// The compact context chips under the prompt; tapping them (or the link)
+// opens the detailed editor.
+function renderContextChips() {
+    const host = $("context-chips");
+    host.innerHTML = "";
+    const add = (text) => {
+        const chip = document.createElement("button");
+        chip.type = "button";
+        chip.className = "chip";
+        chip.textContent = text;
+        chip.addEventListener("click", toggleContextEditor);
+        host.appendChild(chip);
+    };
+    add(`◷ ${hh(Number($("hour-start").value || 9)).slice(0, 5)}–` +
+        `${hh(Number($("hour-end").value || 18)).slice(0, 5)}`);
+    if ($("manual-weather").checked) {
+        add(`🌡 ${$("manual-temp").value}°${$("manual-rain").checked ? " 🌧" : ""}`);
+    } else {
+        add(`📍 ${savedLocation ? savedLocation.city : detectedCity || "…"}`);
+    }
+    if (mood) {
+        const chipEl = document.querySelector(`#mood-chips button[data-slug="${mood}"]`);
+        add(`✦ ${chipEl ? chipEl.textContent : mood}`);
+    } else if ($("feel-input").value.trim()) {
+        add("✦ …");
+    }
+    if ($("gender-select").value) {
+        add($("gender-select").selectedOptions[0].textContent);
+    }
+}
+
+function toggleContextEditor() {
+    $("context-editor").classList.toggle("hidden");
 }
 
 // Phone photos are often 5-10 MB, which makes classification slow and
@@ -602,6 +741,7 @@ function appendFeedbackWidget(box, recommendationId, listId) {
             if (data.outfit) {
                 box.appendChild(note("revised_note"));
                 renderOutfitList($(listId), data.outfit);
+                if (listId === "outfit-list") renderStageBoard(data.outfit);
                 if (data.recommendation_id) {
                     appendFeedbackWidget(box, data.recommendation_id, listId);
                 }
@@ -632,6 +772,7 @@ async function loadMoods() {
             if (mood) $("feel-input").value = "";  // the pick replaces free text
             chips.querySelectorAll("button").forEach((b) =>
                 b.classList.toggle("selected", b === btn && mood !== null));
+            renderContextChips();
         });
         chips.appendChild(btn);
     }
@@ -669,18 +810,9 @@ async function recommend() {
                 weatherQueryString());
         }
         $("mood-line").classList.toggle("hidden", !feeling);
-
-        $("weather-line").textContent = t("weather")(data.weather);
         $("source-note").classList.toggle("hidden",
             !(useWardrobe && data.source === "catalog"));
-
-        renderOutfitList($("outfit-list"), data.outfit);
-        $("explanation").textContent = data.explanation || "";
-        $("explanation").classList.toggle("hidden", !data.explanation);
-        renderFeedback("feedback-box", data.recommendation_id, "outfit-list");
-        $("stage-empty").classList.add("hidden");
-        $("result").classList.remove("hidden");
-        savedOutfits = null;  // a new look was saved for the OUTFITS tab
+        renderStage(data);
     } catch (err) {
         console.error(err);
         showError(t("error"));
@@ -693,7 +825,7 @@ async function recommend() {
 async function ask() {
     const text = $("ask-input").value.trim();
     if (!text) return;
-    const btn = $("ask-btn");
+    const btn = $("recommend-btn");
     btn.disabled = true;
     btn.textContent = t("asking");
     $("error").classList.add("hidden");
@@ -708,19 +840,25 @@ async function ask() {
             showError(data.code === "no_api_key" ? t("ask_no_key") : t("error"));
             return;
         }
-        $("ask-weather-line").textContent = t("weather")(data.weather);
-        renderOutfitList($("ask-outfit-list"), data.outfit);
-        $("ask-explanation").textContent = data.explanation || "";
-        renderFeedback("ask-feedback-box", data.recommendation_id, "ask-outfit-list");
-        $("stage-empty").classList.add("hidden");
-        $("ask-result").classList.remove("hidden");
-        savedOutfits = null;  // a new look was saved for the OUTFITS tab
+        $("mood-line").classList.add("hidden");
+        $("source-note").classList.add("hidden");
+        renderStage(data);
     } catch (err) {
         console.error(err);
         showError(t("error"));
     } finally {
         btn.disabled = false;
-        btn.textContent = t("ask");
+        btn.textContent = t("recommend");
+    }
+}
+
+// One primary action: a written plan goes through the Gemini parser,
+// otherwise the plain mood/weather recommendation runs.
+function primaryAction() {
+    if ($("ask-input").value.trim()) {
+        ask();
+    } else {
+        recommend();
     }
 }
 
@@ -1696,7 +1834,8 @@ document.querySelectorAll(".lang-switch button").forEach((btn) => {
         lang = btn.dataset.lang;
         localStorage.setItem("lang", lang);
         await refreshAll();
-        if (!$("result").classList.contains("hidden")) await recommend();
+        renderContextChips();
+        if ($("stage-empty").classList.contains("hidden")) primaryAction();
     });
 });
 
@@ -1730,14 +1869,15 @@ document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") closePanel();
 });
 
-$("recommend-btn").addEventListener("click", recommend);
-$("ask-btn").addEventListener("click", ask);
+$("recommend-btn").addEventListener("click", primaryAction);
+$("again-btn").addEventListener("click", primaryAction);
 $("ask-input").addEventListener("keydown", (e) => {
     if (e.key === "Enter" && !e.shiftKey) {
         e.preventDefault();
-        ask();
+        primaryAction();
     }
 });
+$("context-edit-btn").addEventListener("click", toggleContextEditor);
 $("type-select").addEventListener("change", loadAttributes);
 $("photo-input").addEventListener("change", classifyPhoto);
 $("save-btn").addEventListener("click", saveItem);
@@ -1761,13 +1901,22 @@ $("location-auto-btn").addEventListener("click", async () => {
 $("manual-weather").addEventListener("change", () => {
     $("manual-weather-fields").classList.toggle(
         "hidden", !$("manual-weather").checked);
+    renderContextChips();
 });
+$("manual-temp").addEventListener("change", renderContextChips);
 $("gender-select").value = localStorage.getItem("gender") || "";
 $("gender-select").addEventListener("change", () => {
     localStorage.setItem("gender", $("gender-select").value);
+    renderContextChips();
 });
+for (const id of ["hour-start", "hour-end"]) {
+    $(id).addEventListener("change", renderContextChips);
+}
+$("feel-input").addEventListener("change", renderContextChips);
 
 initHourSelects();
+renderContextChips();
+renderRecentLooks();
 refreshAll().catch((err) => {
     console.error(err);
     showError(STRINGS[lang].error);

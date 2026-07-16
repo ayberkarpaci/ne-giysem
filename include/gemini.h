@@ -42,11 +42,13 @@ std::string buildParsePrompt(const std::string& user_text, const std::string& to
 std::string buildMoodPrompt(const std::string& user_text);
 std::string buildClassifyPrompt(const std::vector<std::string>& type_slugs,
                                 const AttributeVocabulary& attribute_values);
-// What the stylist pass produces: the chosen items plus one warm sentence
-// (in the requested language) saying why the combination works.
+// What the stylist pass produces: the chosen items, one warm sentence (in
+// the requested language) saying why the combination works, and a short
+// editorial title for the look ("Quiet city evening").
 struct StyledOutfit {
     std::vector<RecommendedItem> items;
     std::string reason;  // may be empty when the model skips it
+    std::string title;   // may be empty when the model skips it
 };
 
 std::string buildStylistPrompt(const std::string& context,
