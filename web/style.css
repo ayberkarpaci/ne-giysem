@@ -505,6 +505,86 @@ body:has(#tab-home:not(.hidden)) > footer {
     font-size: 0.8rem;
 }
 
+/* ---- structured explanation: confidence + checklist ---- */
+
+.confidence-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 0.35rem;
+}
+
+.confidence-label {
+    font-size: 0.66rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+}
+
+.confidence-value {
+    font-size: 0.9rem;
+    font-weight: 780;
+    color: var(--accent);
+}
+
+.confidence-bar {
+    height: 0.4rem;
+    border-radius: 999px;
+    background: var(--accent-soft);
+    overflow: hidden;
+    margin-bottom: 0.7rem;
+}
+
+.confidence-bar span {
+    display: block;
+    height: 100%;
+    border-radius: 999px;
+    background: var(--accent);
+    transition: width 0.4s ease;
+}
+
+.check-list {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    margin-bottom: 0.7rem;
+}
+
+.check-list li {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    font-size: 0.76rem;
+    font-weight: 600;
+}
+
+.check-list li.off {
+    color: var(--muted);
+}
+
+.check-icon {
+    display: inline-grid;
+    place-items: center;
+    width: 1.05rem;
+    height: 1.05rem;
+    border-radius: 999px;
+    font-size: 0.62rem;
+    font-weight: 800;
+    flex-shrink: 0;
+}
+
+.check-list li.ok .check-icon {
+    background: var(--accent-soft);
+    color: var(--accent);
+}
+
+.check-list li.off .check-icon {
+    background: #f1f1f2;
+    color: #a5a6ad;
+}
+
 .stylist-note {
     margin: 0;
     color: #63656f;

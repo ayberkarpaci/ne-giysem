@@ -1,5 +1,7 @@
 #pragma once
 
+#include <nlohmann/json.hpp>
+
 #include <string>
 #include <vector>
 
@@ -27,7 +29,8 @@ std::string outfitToJson(const std::vector<RecommendedItem>& outfit,
                          const std::string& source = "catalog",
                          int recommendation_id = 0,
                          const std::string& explanation = "",
-                         const std::string& title = "");
+                         const std::string& title = "",
+                         const nlohmann::json& insights = nlohmann::json());
 std::string moodsToJson(Database& db, const std::string& lang);
 
 // HTTP server: serves the static web UI plus a small JSON API.

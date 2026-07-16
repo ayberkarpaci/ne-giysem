@@ -44,8 +44,10 @@ the phases below move harmony, formality and learning into our own algorithm.
 - [x] **3.1 Style profile** — attribute preference weights learned from
   ratings: each value slug carries a mean rating signal in [-1, 1] damped
   by observation count; ±0.1/point (capped ±0.3) in wardrobe scoring.
-- [ ] **3.2 Structured explanation + confidence score** — checklist reasons
-  and a confidence percentage instead of a single sentence.
+- [x] **3.2 Structured explanation + confidence score** — a rule-based
+  checklist (weather fit, rain readiness, formality, colors, patterns,
+  loved pairs, style match) plus a deterministic 35-97% confidence, shown
+  as a meter over the stylist's sentence.
 - [ ] **3.3 Wardrobe analytics** — distribution dashboard, gap analysis,
   missing-piece suggestions; optional cost-per-wear.
 

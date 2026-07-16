@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>ne giysem?</title>
     <!-- The ?v= query busts stale browser caches; bump it when these files change. -->
-    <link rel="stylesheet" href="style.css?v=20260716c">
+    <link rel="stylesheet" href="style.css?v=20260716d">
 </head>
 <body>
     <header class="topbar">
@@ -110,6 +110,14 @@
 
         <section class="side-section hidden" id="why-section">
             <h2 class="section-title" data-i18n="why_title">Why it works</h2>
+            <div id="insights" class="hidden">
+                <div class="confidence-row">
+                    <span class="confidence-label" data-i18n="confidence_label">Confidence</span>
+                    <span class="confidence-value" id="confidence-value"></span>
+                </div>
+                <div class="confidence-bar"><span id="confidence-fill"></span></div>
+                <ul id="check-list" class="check-list"></ul>
+            </div>
             <p id="explanation" class="stylist-note"></p>
             <div id="mood-line" class="note hidden"></div>
             <p id="source-note" class="note hidden" data-i18n="catalog_fallback"></p>
@@ -191,6 +199,6 @@
 
     <footer data-i18n="footer">Weather by open-meteo.com &middot; location by ip-api.com</footer>
 
-    <script src="app.js?v=20260716c"></script>
+    <script src="app.js?v=20260716d"></script>
 </body>
 </html>

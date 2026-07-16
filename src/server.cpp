@@ -47,6 +47,14 @@ json itemToJson(const RecommendedItem& item) {
     return entry;
 }
 
+json insightsToJson(const OutfitInsights& insights) {
+    json checks = json::array();
+    for (const auto& check : insights.checks) {
+        checks.push_back({{"slug", check.slug}, {"ok", check.ok}});
+    }
+    return {{"confidence", insights.confidence}, {"checks", checks}};
+}
+
 json weatherToJson(const WeatherReport& weather) {
     json body = {
         {"temperature_c", weather.temperature_c},
@@ -178,7 +186,8 @@ std::string outfitToJson(const std::vector<RecommendedItem>& outfit,
                          const std::string& source,
                          int recommendation_id,
                          const std::string& explanation,
-                         const std::string& title) {
+                         const std::string& title,
+                         const json& insights) {
     json items = json::array();
     for (const auto& item : outfit) {
         items.push_back(itemToJson(item));
@@ -191,6 +200,7 @@ std::string outfitToJson(const std::vector<RecommendedItem>& outfit,
         {"explanation", explanation},
         {"title", title},
     };
+    if (!insights.is_null()) body["insights"] = insights;
     if (recommendation_id > 0) body["recommendation_id"] = recommendation_id;
     return body.dump();
 }
@@ -459,8 +469,10 @@ bool Server::run(int port) {
             const int rec_id = FeedbackRepository(db_).recordRecommendation(
                 request, outfit, source, explanation);
             if (!look_title.empty()) FeedbackRepository(db_).setOutfitTitle(rec_id, look_title);
+            const json insights = insightsToJson(recommender.outfitInsights(
+                outfit, weather.temperature_c, weather.is_raining));
             res.set_content(outfitToJson(outfit, weather, request.mood_slug, source, rec_id,
-                                         explanation, look_title),
+                                         explanation, look_title, insights),
                             "application/json");
         } catch (const std::exception& e) {
             res.status = 500;
@@ -864,6 +876,8 @@ bool Server::run(int port) {
                     {"outfit", items},
                     {"explanation", explanation},
                     {"title", look_title},
+                    {"insights", insightsToJson(recommender.outfitInsights(
+                        outfit, weather.temperature_c, weather.is_raining))},
                 }
                     .dump(),
                 "application/json");
@@ -1100,6 +1114,8 @@ bool Server::run(int port) {
                     {"outfit", items},
                     {"explanation", explanation},
                     {"title", look_title},
+                    {"insights", insightsToJson(recommender.outfitInsights(
+                        outfit, weather.temperature_c, weather.is_raining))},
                 }
                     .dump(),
                 "application/json");

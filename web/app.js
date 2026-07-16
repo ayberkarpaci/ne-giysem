@@ -51,6 +51,14 @@ const STRINGS = {
         recent_hint: "Tap one to bring it back",
         edit_context: "Adjust details ▾",
         fallback_title: "Today's pick",
+        confidence_label: "Confidence",
+        "check_weather-fit": "Fits the weather",
+        "check_rain-ready": "Ready for rain",
+        "check_formality-consistent": "Dress code consistent",
+        "check_colors-harmonious": "Colors in harmony",
+        "check_patterns-calm": "Patterns balanced",
+        "check_loved-pair": "A duo you loved before",
+        "check_style-match": "Matches your style profile",
         ask_no_key: "The Gemini API key is not set up yet (see .env).",
         wardrobe_title: "My wardrobe",
         wardrobe_empty: "No items yet — add your first piece below!",
@@ -181,6 +189,14 @@ const STRINGS = {
         recent_hint: "Geri getirmek için dokun",
         edit_context: "Ayrıntıları düzenle ▾",
         fallback_title: "Bugünün önerisi",
+        confidence_label: "Güven",
+        "check_weather-fit": "Havaya uygun",
+        "check_rain-ready": "Yağmura hazır",
+        "check_formality-consistent": "Resmiyet tutarlı",
+        "check_colors-harmonious": "Renkler uyumlu",
+        "check_patterns-calm": "Desenler dengeli",
+        "check_loved-pair": "Daha önce sevdiğin bir ikili",
+        "check_style-match": "Stil profiline uygun",
         ask_no_key: "Gemini API anahtarı henüz ayarlanmamış (.env dosyasına bak).",
         wardrobe_title: "Gardırobum",
         wardrobe_empty: "Henüz kıyafet yok — aşağıdan ilk parçanı ekle!",
@@ -501,8 +517,9 @@ function renderStage(data) {
     renderOutfitList($("outfit-list"), data.outfit);
     $("item-count").textContent = t("piece_count")(data.outfit.length);
     $("explanation").textContent = data.explanation || "";
+    renderInsights(data.insights);
     $("why-section").classList.toggle(
-        "hidden", !data.explanation && !data.moods && data.source !== "catalog");
+        "hidden", !data.explanation && !data.insights);
     renderFeedback("feedback-box", data.recommendation_id, "outfit-list");
     if (data.weather) {
         const w = data.weather;
@@ -564,6 +581,32 @@ async function renderRecentLooks() {
             });
         });
         host.appendChild(card);
+    }
+}
+
+// The structured explanation: a confidence meter plus the checklist of
+// reasons the stylist engine verified (or flagged).
+function renderInsights(insights) {
+    const box = $("insights");
+    if (!insights || !insights.checks || insights.checks.length === 0) {
+        box.classList.add("hidden");
+        return;
+    }
+    box.classList.remove("hidden");
+    $("confidence-value").textContent = `%${insights.confidence}`;
+    $("confidence-fill").style.width = `${insights.confidence}%`;
+    const list = $("check-list");
+    list.innerHTML = "";
+    for (const check of insights.checks) {
+        const li = document.createElement("li");
+        li.className = check.ok ? "ok" : "off";
+        const icon = document.createElement("span");
+        icon.className = "check-icon";
+        icon.textContent = check.ok ? "✓" : "✕";
+        const label = document.createElement("span");
+        label.textContent = t(`check_${check.slug}`) || check.slug;
+        li.append(icon, label);
+        list.appendChild(li);
     }
 }
 

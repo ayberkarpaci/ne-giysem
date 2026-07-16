@@ -453,3 +453,48 @@ TEST_CASE("styleAdjustment seasons scores with the learned profile") {
     const std::map<std::string, double> extreme = {{"navy", 9.0}};
     CHECK_THAT(styleAdjustment({"navy"}, extreme), WithinAbs(0.3, 1e-9));
 }
+
+TEST_CASE("buildOutfitInsights: checklist + confidence") {
+    using negiysem::buildOutfitInsights;
+    const std::vector<RecommendedItem> outfit = {
+        piece("t-shirt", "top", 1.0, {"navy"}),
+        piece("jeans", "bottom", 1.0, {"blue"})};
+    negiysem::TemperatureRanges ranges = {
+        {"t-shirt", {18.0, 32.0}}, {"jeans", {5.0, 26.0}}};
+
+    SECTION("a sound outfit on a dry day passes the core checks") {
+        const auto insights = buildOutfitInsights(outfit, 22.0, false, ranges,
+                                                  {false, false}, {}, {});
+        REQUIRE(insights.checks.size() == 4);  // no rain check on dry days
+        for (const auto& check : insights.checks) CHECK(check.ok);
+        CHECK(insights.confidence == 55 + 4 * 8);
+    }
+    SECTION("heat outside a range fails weather-fit and costs confidence") {
+        const auto insights = buildOutfitInsights(outfit, 35.0, false, ranges,
+                                                  {false, false}, {}, {});
+        CHECK_FALSE(insights.checks[0].ok);  // weather-fit
+        CHECK(insights.confidence == 55 - 7 + 3 * 8);
+    }
+    SECTION("rain adds a rain-ready check") {
+        const auto wet = buildOutfitInsights(outfit, 22.0, true, ranges,
+                                             {false, true}, {}, {});
+        REQUIRE(wet.checks.size() == 5);
+        CHECK(wet.checks[1].slug == "rain-ready");
+        CHECK(wet.checks[1].ok);
+    }
+    SECTION("learned signals only appear when they speak") {
+        const negiysem::PairAffinities memory = {{{"jeans", "t-shirt"}, 2}};
+        const std::map<std::string, double> prefs = {{"navy", 0.9}};
+        const auto insights = buildOutfitInsights(outfit, 22.0, false, ranges,
+                                                  {false, false}, memory, prefs);
+        REQUIRE(insights.checks.size() == 6);
+        CHECK(insights.checks[4].slug == "loved-pair");
+        CHECK(insights.checks[4].ok);
+        CHECK(insights.checks[5].slug == "style-match");
+        CHECK(insights.checks[5].ok);
+        CHECK(insights.confidence == 97);  // 55 + 6*8 clamped
+    }
+    SECTION("empty outfit yields nothing") {
+        CHECK(buildOutfitInsights({}, 20.0, false, {}, {}, {}, {}).checks.empty());
+    }
+}

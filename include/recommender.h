@@ -125,6 +125,36 @@ std::vector<RecommendedItem> assembleOutfit(const OutfitCandidates& candidates,
                                             std::mt19937* rng = nullptr,
                                             double tie_tolerance = 0.05);
 
+// One entry of the structured explanation: a stable slug the UI localizes
+// ("weather-fit", "colors-harmonious", ...) and whether the outfit passes.
+struct OutfitCheck {
+    std::string slug;
+    bool ok = false;
+};
+
+// The structured explanation: checklist + a 35-97% confidence score.
+struct OutfitInsights {
+    std::vector<OutfitCheck> checks;
+    int confidence = 0;
+};
+
+// Comfort range (already user-calibrated) per catalog type slug; nullopt
+// bounds mean the type has no range.
+using TemperatureRanges =
+    std::map<std::string, std::pair<std::optional<double>, std::optional<double>>>;
+
+// Pure checklist builder, exposed for unit testing. Checks: weather-fit,
+// rain-ready (rainy days only), formality-consistent, colors-harmonious,
+// patterns-calm; loved-pair and style-match join only when the learned
+// signals say something. Confidence starts at 55 and moves +8/-7 per
+// passing/failing check, clamped to [35, 97].
+OutfitInsights buildOutfitInsights(const std::vector<RecommendedItem>& outfit,
+                                   double temperature_c, bool is_raining,
+                                   const TemperatureRanges& ranges,
+                                   const std::vector<bool>& waterproof_flags,
+                                   const PairAffinities& affinities,
+                                   const std::map<std::string, double>& style_prefs);
+
 // Picks the best-scoring item per category. Core categories (top, bottom,
 // footwear) are always present; optional ones (outerwear, accessory) only
 // when their best item scores at least kOptionalCategoryThreshold.
@@ -148,6 +178,12 @@ public:
     OutfitCandidates candidates(const RecommendationRequest& request, int limit) const;
     OutfitCandidates candidatesFromWardrobe(const RecommendationRequest& request,
                                             int limit) const;
+
+    // The structured explanation for a chosen outfit: loads the comfort
+    // ranges (with personal offsets), waterproof flags, pair memory and
+    // style profile, then delegates to buildOutfitInsights.
+    OutfitInsights outfitInsights(const std::vector<RecommendedItem>& outfit,
+                                  double temperature_c, bool is_raining) const;
 
 private:
     Database& db_;

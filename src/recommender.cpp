@@ -3,6 +3,7 @@
 #include <sqlite3.h>
 
 #include <algorithm>
+#include <cmath>
 #include <cstdlib>
 #include <map>
 #include <stdexcept>
@@ -465,6 +466,100 @@ void insertCandidate(OutfitCandidates& by_category, RecommendedItem&& item, int 
 }
 
 }  // namespace
+
+OutfitInsights buildOutfitInsights(const std::vector<RecommendedItem>& outfit,
+                                   double temperature_c, bool is_raining,
+                                   const TemperatureRanges& ranges,
+                                   const std::vector<bool>& waterproof_flags,
+                                   const PairAffinities& affinities,
+                                   const std::map<std::string, double>& style_prefs) {
+    OutfitInsights insights;
+    if (outfit.empty()) return insights;
+
+    // Weather: every piece with a range must sit inside it (post-offset).
+    bool weather_ok = true;
+    for (const auto& item : outfit) {
+        const auto it = ranges.find(item.item_slug);
+        if (it == ranges.end()) continue;
+        const auto& [min_c, max_c] = it->second;
+        if ((min_c && temperature_c < *min_c) || (max_c && temperature_c > *max_c)) {
+            weather_ok = false;
+        }
+    }
+    insights.checks.push_back({"weather-fit", weather_ok});
+
+    if (is_raining) {
+        bool any_waterproof = false;
+        for (const bool flag : waterproof_flags) any_waterproof |= flag;
+        insights.checks.push_back({"rain-ready", any_waterproof});
+    }
+
+    insights.checks.push_back({"formality-consistent",
+                               formalityConsistency(outfit) >= 0.0});
+    insights.checks.push_back({"colors-harmonious", colorHarmony(outfit) >= 0.0});
+    insights.checks.push_back({"patterns-calm", patternClashPenalty(outfit) >= 0.0});
+
+    // Learned signals only speak when they have something to say.
+    if (pairAffinityBonus(outfit, affinities) > 0.0) {
+        insights.checks.push_back({"loved-pair", true});
+    }
+    double style_sum = 0.0;
+    for (const auto& item : outfit) {
+        style_sum += styleAdjustment(item.value_slugs, style_prefs);
+    }
+    if (std::abs(style_sum) > 0.05) {
+        insights.checks.push_back({"style-match", style_sum > 0.0});
+    }
+
+    int confidence = 55;
+    for (const auto& check : insights.checks) {
+        confidence += check.ok ? 8 : -7;
+    }
+    insights.confidence = std::clamp(confidence, 35, 97);
+    return insights;
+}
+
+OutfitInsights Recommender::outfitInsights(const std::vector<RecommendedItem>& outfit,
+                                           double temperature_c, bool is_raining) const {
+    sqlite3* db = db_.handle();
+    const auto temp_offsets = FeedbackRepository(db_).temperatureOffsets();
+
+    TemperatureRanges ranges;
+    std::vector<bool> waterproof_flags;
+    for (const auto& item : outfit) {
+        sqlite3_stmt* stmt = nullptr;
+        if (sqlite3_prepare_v2(db,
+                               "SELECT min_temp_c, max_temp_c, is_waterproof "
+                               "FROM clothing_items WHERE slug = ?1;",
+                               -1, &stmt, nullptr) != SQLITE_OK) {
+            throw std::runtime_error(std::string("prepare failed: ") + sqlite3_errmsg(db));
+        }
+        sqlite3_bind_text(stmt, 1, item.item_slug.c_str(), -1, SQLITE_TRANSIENT);
+        if (sqlite3_step(stmt) == SQLITE_ROW) {
+            std::optional<double> min_c;
+            std::optional<double> max_c;
+            if (sqlite3_column_type(stmt, 0) != SQLITE_NULL) {
+                min_c = sqlite3_column_double(stmt, 0);
+            }
+            if (sqlite3_column_type(stmt, 1) != SQLITE_NULL) {
+                max_c = sqlite3_column_double(stmt, 1);
+            }
+            const auto offset_it = temp_offsets.find(item.item_slug);
+            if (offset_it != temp_offsets.end()) {
+                if (min_c) *min_c += offset_it->second;
+                if (max_c) *max_c += offset_it->second;
+            }
+            ranges[item.item_slug] = {min_c, max_c};
+            waterproof_flags.push_back(sqlite3_column_int(stmt, 2) != 0);
+        }
+        sqlite3_finalize(stmt);
+    }
+
+    return buildOutfitInsights(outfit, temperature_c, is_raining, ranges,
+                               waterproof_flags,
+                               FeedbackRepository(db_).pairAffinities(),
+                               FeedbackRepository(db_).stylePreferences());
+}
 
 std::vector<RecommendedItem> Recommender::recommend(const RecommendationRequest& request) const {
     return assembleOutfit(candidates(request, 3), kOptionalCategoryThreshold,
