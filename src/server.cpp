@@ -867,7 +867,8 @@ bool Server::run(int port) {
         try {
             const int id = std::stoi(req.matches[1]);
             WardrobeRepository repo(db_);
-            if (!repo.photoPath(id)) {
+            const auto old_photo = repo.photoPath(id);
+            if (!old_photo) {
                 res.status = 404;
                 res.set_content(json{{"error", "no such wardrobe item"}}.dump(),
                                 "application/json");
@@ -885,6 +886,18 @@ bool Server::run(int port) {
             std::ofstream out(std::filesystem::path(kPhotoDir) / file_name, std::ios::binary);
             out.write(req.body.data(), static_cast<std::streamsize>(req.body.size()));
             out.close();
+            if (!out) {
+                res.status = 500;
+                res.set_content(json{{"error", "could not save the photo"}}.dump(),
+                                "application/json");
+                return;
+            }
+            // A JPEG replaced by a PNG gets a new file name; drop the old file
+            // so it does not linger on disk.
+            if (!old_photo->empty() && *old_photo != file_name) {
+                std::error_code ignored;
+                std::filesystem::remove(std::filesystem::path(kPhotoDir) / *old_photo, ignored);
+            }
             // The cutout was made from the old photo; setPhotoPath clears the
             // column, this clears the file.
             const auto cutout = repo.cutoutPath(id);
