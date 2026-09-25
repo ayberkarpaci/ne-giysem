@@ -295,3 +295,23 @@ TEST_CASE("stylePreferences learns attribute weights from ratings") {
     }
     CHECK_THAT(repo.stylePreferences().at("navy"), WithinAbs(1.0, 1e-9));
 }
+
+TEST_CASE("stylePreferences counts a value once per rated outfit") {
+    Database db = makeSeededDb();
+    negiysem::WardrobeRepository wardrobe(db);
+    const int tee = wardrobe.addItem("t-shirt", "", {"navy"});
+    const int jeans = wardrobe.addItem("jeans", "", {"navy"});
+
+    FeedbackRepository repo(db);
+    RecommendedItem top;
+    top.item_slug = "t-shirt";
+    top.wardrobe_id = tee;
+    RecommendedItem bottom;
+    bottom.item_slug = "jeans";
+    bottom.wardrobe_id = jeans;
+
+    // Two navy pieces, one rating: one observation, so damping is 1/5.
+    repo.addFeedback(repo.recordRecommendation(coldCozyRequest(), {top, bottom}, "wardrobe"),
+                     5, "");
+    CHECK_THAT(repo.stylePreferences().at("navy"), WithinAbs(0.2, 1e-9));
+}

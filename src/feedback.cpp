@@ -294,14 +294,19 @@ std::map<std::string, double> FeedbackRepository::temperatureOffsets() const {
 std::map<std::string, double> FeedbackRepository::stylePreferences() const {
     // Each rating maps to a signal in [-1, 1] ((rating-3)/2); a value's
     // weight is the mean signal over the rated outfits it appeared in,
-    // scaled by min(1, n/5) so sparse evidence stays timid.
+    // scaled by min(1, n/5) so sparse evidence stays timid. DISTINCT keeps
+    // one row per (rating, value): two navy pieces in one outfit are still
+    // a single piece of evidence for navy.
     Statement stmt(db_.handle(), R"sql(
-        SELECT v.slug, AVG((f.rating - 3.0) / 2.0), COUNT(*)
-        FROM recommendation_feedback f
-        JOIN recommendation_items ri ON ri.recommendation_id = f.recommendation_id
-        JOIN wardrobe_item_attributes wa ON wa.wardrobe_item_id = ri.wardrobe_item_id
-        JOIN attribute_values v ON v.id = wa.attribute_value_id
-        GROUP BY v.slug;
+        SELECT slug, AVG((rating - 3.0) / 2.0), COUNT(*)
+        FROM (
+            SELECT DISTINCT f.id, f.rating, v.slug
+            FROM recommendation_feedback f
+            JOIN recommendation_items ri ON ri.recommendation_id = f.recommendation_id
+            JOIN wardrobe_item_attributes wa ON wa.wardrobe_item_id = ri.wardrobe_item_id
+            JOIN attribute_values v ON v.id = wa.attribute_value_id
+        )
+        GROUP BY slug;
     )sql");
     std::map<std::string, double> preferences;
     while (stmt.step()) {
