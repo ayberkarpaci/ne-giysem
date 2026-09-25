@@ -10,10 +10,11 @@ the phases below move harmony, formality and learning into our own algorithm.
   on every catalog type; map the already-parsed `occasion` (work/casual/sport/
   date/special) to a target formality and penalize distance from it.
 - [x] **1.2 Combination-level scoring** — enumerate combinations of the top
-  candidates per category and score them as a whole: sum of item scores +
+  candidates per category and score them as a whole: mean item score +
   color-harmony term (neutrals pair with everything, clash pairs penalized) +
   formality-consistency term + bold-pattern-count penalty. One-piece garments
-  replace top+bottom in enumeration. The rule-based fallback then produces
+  replace top+bottom in enumeration (the mean keeps one- and two-garment
+  combinations comparable). The rule-based fallback then produces
   coherent outfits on its own; Gemini refines instead of rescuing.
 - [x] **1.3 Structured feedback** — one-tap chips under the stars: too hot,
   too cold, colors clash, too formal, too sporty, uncomfortable. Tags are
@@ -36,14 +37,15 @@ the phases below move harmony, formality and learning into our own algorithm.
   among outfits within 0.05 of the best (wardrobe only), +0.05 exploration
   bonus for never-worn pieces.
 - [x] **2.3 Laundry state** — clean/dirty flag with a per-category wear
-  budget (tops 2, bottoms 4, outerwear 8; shoes & co never), auto-dirty when
+  budget (tops and one-pieces 2, bottoms 4, outerwear 8; shoes & co never), auto-dirty when
   the budget runs out, dirty items excluded from candidates; washing resets.
 
 ## Phase 3 — A stylist that knows you
 
 - [x] **3.1 Style profile** — attribute preference weights learned from
   ratings: each value slug carries a mean rating signal in [-1, 1] damped
-  by observation count; ±0.1/point (capped ±0.3) in wardrobe scoring.
+  by observation count (one observation per rated outfit, however many of
+  its pieces share the value); ±0.1/point (capped ±0.3) in wardrobe scoring.
 - [x] **3.2 Structured explanation + confidence score** — a rule-based
   checklist (weather fit, rain readiness, formality, colors, patterns,
   loved pairs, style match) plus a deterministic 35-97% confidence, shown
@@ -57,8 +59,10 @@ the phases below move harmony, formality and learning into our own algorithm.
 
 - Near-term: photo-hash classification cache, weather/geocode caching,
   batching several photos per Gemini request.
-- At mobile time: PWA packaging, device tokens, `user_id` columns, CI
-  (GitHub Actions, vcpkg-cached CMake + tests).
+- Mobile: a separate React Native (Expo) app, local-first with on-device
+  SQLite and no backend; this app gets an `export` command so the wardrobe,
+  ratings and history can be carried over.
+- CI: GitHub Actions with vcpkg-cached CMake + tests.
 - Done meanwhile: garment cutout extraction (local rembg/BiRefNet by
   default, Gemini image model + chroma keying as paid opt-in) with a
   lookbook wardrobe (cream gallery, category tabs, item detail panel with
