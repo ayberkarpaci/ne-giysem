@@ -41,5 +41,5 @@ Desktop.ini
 *.lib
 *.pdb
 
-# Claude Code local settings
+# Local tool settings
 .claude/
