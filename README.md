@@ -18,13 +18,28 @@ ne-giysem/
 ## Building
 
 Requires CMake (3.21+), a C++17 compiler, and [vcpkg](https://github.com/microsoft/vcpkg).
-The vcpkg toolchain path is set in `CMakeLists.txt`; override it with
-`-DCMAKE_TOOLCHAIN_FILE=<path>/scripts/buildsystems/vcpkg.cmake` if yours lives elsewhere.
+Dependencies (SQLite, cpr, nlohmann-json, cpp-httplib, stb, Catch2) come from
+`vcpkg.json`. CMake finds vcpkg through the `VCPKG_ROOT` environment variable,
+falling back to `~/vcpkg`; pass
+`-DCMAKE_TOOLCHAIN_FILE=<path>/scripts/buildsystems/vcpkg.cmake` to use another
+location.
 
 ```sh
 cmake -S . -B build
 cmake --build build
 ```
+
+## Configuration
+
+Settings are read from the environment or from a `.env` file in the repo root
+(`.env` is gitignored):
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `GEMINI_API_KEY` | none | Enables the Gemini features (free-text requests, photo classification). Free key at [aistudio.google.com](https://aistudio.google.com/) |
+| `GEMINI_MODEL` | `gemini-flash-latest` | Gemini model used for text and classification |
+| `GEMINI_IMAGE_MODEL` | `gemini-2.5-flash-image` | Image model for the Gemini cutout backend |
+| `EXTRACT_BACKEND` | `rembg` | Set to `gemini` to make cutouts with Gemini's image model instead of local rembg |
 
 ## Usage
 

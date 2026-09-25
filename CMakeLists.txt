@@ -2,7 +2,12 @@ cmake_minimum_required(VERSION 3.21)
 
 # vcpkg integration — must be set before project()
 if(NOT DEFINED CMAKE_TOOLCHAIN_FILE)
-    set(CMAKE_TOOLCHAIN_FILE "C:/Users/ayberk/vcpkg/scripts/buildsystems/vcpkg.cmake"
+    if(DEFINED ENV{VCPKG_ROOT})
+        set(VCPKG_ROOT_DIR "$ENV{VCPKG_ROOT}")
+    else()
+        set(VCPKG_ROOT_DIR "$ENV{USERPROFILE}/vcpkg")
+    endif()
+    set(CMAKE_TOOLCHAIN_FILE "${VCPKG_ROOT_DIR}/scripts/buildsystems/vcpkg.cmake"
         CACHE STRING "Vcpkg toolchain file")
 endif()
 
